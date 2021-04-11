@@ -44,4 +44,3 @@ for substituent in grouplist:
   #print(new_smiles)
   new_inchi=Chem.MolToInchi(Chem.MolFromSmiles(new_smiles))
   print(new_inchi)
-

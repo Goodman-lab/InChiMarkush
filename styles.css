@@ -200,6 +200,19 @@ pre {
     padding-right: 1em;
 }
 
+textarea {
+    width: 100%;
+}
+
+
+#copybutton {
+  font-size:25px;
+  padding-top:5px;
+  padding-bottom:5px;
+  width: 100%;
+}
+
+
 
 
 
