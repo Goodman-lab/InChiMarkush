@@ -64,11 +64,9 @@ if ($_GET['InChIKey']) {
             exit();
         }
 
-        //Run the script to generate the QR code
+        //Run the script to deconstruct the MarkInChi
         $safeCommand = "python3 markinchi2inchi.py " . $escapedCode;
         passthru($safeCommand);
-
-        //exit();
 
     } else {
         //The code is of an invalid schema, so redirect to the error page
@@ -85,7 +83,6 @@ if ($_GET['InChIKey']) {
 
 
         </textarea>
-
         <br>
         <button id="copybutton" onclick="myFunction()" onmouseout="outFunc()">
             Copy output to clipboard

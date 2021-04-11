@@ -2,45 +2,36 @@
 #
 # source activate my-rdkit-env
 #
-import sys
+################################################################
+
 from rdkit import Chem
-#################################################################
-#print(sys.argv)
 
 
-#m = Chem.MolFromMolFile(sys.argv[1])
-#mu = Chem.MolFromMolBlock(sys.argv[1], sanitize = False)
-#print("read molfile: "+sys.argv[1])
-#inchi = Chem.inchi.MolToInchi(m)
-#print(inchi)
-#print(Chem.MolToSmiles(m))
+def run(inchiplus, grouplist):
+    inchiplus=sys.argv[1].split("<>")
+    grouplist=inchiplus[1].split("!")
 
-if sys.argv[1].find("Te") == -1:
-  print("No tellurium")
-  exit()
-if sys.argv[1].find("<>") == -1:
-  print("No substituents")
-  exit()
+    molfrominchi = Chem.rdinchi.InchiToMol(inchiplus[0])
+    smiles_core=Chem.MolToSmiles(molfrominchi[0])
 
+    for substituent in grouplist:
+        if substituent == "H":
+            substituent = ""
+        new_smiles=smiles_core.replace("[Te]", substituent)
 
-inchiplus=sys.argv[1].split("<>")
-grouplist=inchiplus[1].split("!")
-#print(molfrominchi)
-
-#print(inchiplus)
-#print(grouplist)
+        new_inchi=Chem.MolToInchi(Chem.MolFromSmiles(new_smiles))
+        print(new_inchi)
 
 
 
-molfrominchi = Chem.rdinchi.InchiToMol(inchiplus[0])
-smiles_core=Chem.MolToSmiles(molfrominchi[0])
-#print(smiles_core)
+if __name__=="__main__":
+    from sys import argv
 
-for substituent in grouplist:
-  #print(substituent)
-  if substituent == "H":
-    substituent = ""
-  new_smiles=smiles_core.replace("[Te]", substituent)
-  #print(new_smiles)
-  new_inchi=Chem.MolToInchi(Chem.MolFromSmiles(new_smiles))
-  print(new_inchi)
+    if argv[1].find("Te") == -1:
+        print("No tellurium")
+    elif argv[1].find("<>") == -1:
+        print("No substituents")
+    else:
+        inchiplus = argv[1].split("<>")
+        grouplist = inchiplus[1].split("!")
+        run(inchiplus, grouplist)
