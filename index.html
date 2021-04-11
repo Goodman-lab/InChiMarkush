@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+        <link rel="stylesheet" href="styles.css">
+        <title>MarkInChI experiments</title>
+    </head>
+    <body>
+
+
+        <section class="navbar">
+            <h1 class="title hidden">Navigation bar</h1>
+            <a href="./index.html" class="active">MarkInChI</a>
+            <div class="dropdown">
+                <button class="dropdownButton">InChI Resources &#9660;</button>
+                <div class="dropdownContent">
+                    <a href="https://www.inchi-trust.org">InChI Trust</a>
+                    <a href="https://iupac.org/who-we-are/committees/committee-details/?body_code=802">IUPAC InChI subcommittee</a>
+		    <a href="http://www-rinchi.ch.cam.ac.uk/qrinchi/">QRInChI</a>
+                    <a href="https://doi.org/10.1186/s13321-018-0277-8">RInChI: the reaction InChI</a>
+                </div>
+            </div>
+            <div class="dropdown">
+                <button class="dropdownButton">About this program &#9660;</button>
+                <div class="dropdownContent">
+                    <a href="http://orcid.org/0000-0002-8693-9136">J. M. Goodman</a>
+                    <a href="http://orcid.org/0000-0002-2824-1805">E. D. J. Goodman</a>
+                    <a href="https://github.com/EdmundGoodman/InChiQRCodes">GitHub Source Code</a>
+                </div>
+            </div>
+        </section>
+
+
+        <section id="contentWrapper">
+            <h1 class="title">
+                MarkInChI experiments
+            </h1>
+
+            <h2 class="heading dropcap">
+                A few simple MarkInChI can be deconstructed with this form. Tellurium should be used in place of the pseudo-element Zz.
+		Amongst the limitations of this resource, only one tellurium atom can be processed in each MarkInChI.
+            </h2><div class="underbar"></div>
+
+
+            <h2 id="id1" class="heading">Enter a MarkInChI:</h2>
+            <!-- Using inline stylings to support safari rendering -->
+            <form action="./mki.php" method="get" style="text-align:center;">
+                <label for="InChIKey"></label>
+                <input type="text" id="InChIKey" name="InChIKey" style="font-size:25px; width:80%; border-radius:2px; border-style:solid; border-color:#333; background-color:#ffffe6;"><br>
+                <input type="reset" value="Reset" style="font-size:25px; margin:10px; padding-top:5px; padding-bottom:5px; padding-left:10px; padding-right:10px;">
+                <input type="submit" value="Deconstruct MarkInChI" style="font-size:25px; margin:10px; padding-top:5px; padding-bottom:5px; padding-left:10px; padding-right:10px;">
+           </form>
+
+            <br>
+            This is an experimental, proof-of-concept, MarkInChI deconstructor. It only understands a small subset of a draft of a MarkInChI syntax, and does not make use of the pseudo-element facility (Zz) of InChI v1.06
+
+
+            <div class="underbar"></div>
+
+        </section>
+
+    </body>
+</html>
