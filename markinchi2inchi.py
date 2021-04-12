@@ -7,23 +7,33 @@
 from rdkit import Chem
 
 
-def run(inchiplus, grouplist):
-    inchiplus=sys.argv[1].split("<>")
-    grouplist=inchiplus[1].split("!")
+def run(inchiplus, smiles_core):
+  #print("=============")
+  #print(inchiplus)
+  #print(smiles_core)
+  inchiplus_item = inchiplus.pop(0)
+  grouplist=inchiplus_item.split("!")
+  for substituent in grouplist:
+    if substituent == "H":
+      substituent = ""
+    new_smiles=smiles_core.replace("[TeH]", substituent, 1)
+    if new_smiles.find("()") >= 0:
+      new_smiles=smiles_core.replace("[TeH]", substituent, 1).replace("()","")
+    if len(inchiplus) == 0:
+      new_inchi=Chem.MolToInchi(Chem.MolFromSmiles(new_smiles))
+      #print(new_smiles)
+      print(new_inchi)
+    else:
+      #print(inchiplus)
+      #print(new_smiles)
+      new_inchiplus = inchiplus.copy()
+      run(new_inchiplus, new_smiles)
+      #print("back from recursion")
+      #print(substituent,new_smiles,inchiplus)
+  return
 
-    molfrominchi = Chem.rdinchi.InchiToMol(inchiplus[0])
-    smiles_core=Chem.MolToSmiles(molfrominchi[0])
 
-    for substituent in grouplist:
-        if substituent == "H":
-            substituent = ""
-        new_smiles=smiles_core.replace("[Te]", substituent)
-
-        new_inchi=Chem.MolToInchi(Chem.MolFromSmiles(new_smiles))
-        print(new_inchi)
-
-
-
+#if True:# __name__=="__main__":
 if __name__=="__main__":
     from sys import argv
 
@@ -33,5 +43,13 @@ if __name__=="__main__":
         print("No substituents")
     else:
         inchiplus = argv[1].split("<>")
-        grouplist = inchiplus[1].split("!")
-        run(inchiplus, grouplist)
+        #grouplist = inchiplus[1].split("!")
+        #run(inchiplus, grouplist)
+        inchiplus_item = inchiplus.pop(0)
+        molfrominchi = Chem.rdinchi.InchiToMol(inchiplus_item)
+        smiles_core=Chem.MolToSmiles(molfrominchi[0])
+        #print(inchiplus_item)
+        #print(inchiplus)
+        #print(smiles_core)
+        run(inchiplus, smiles_core)
+

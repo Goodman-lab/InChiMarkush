@@ -51,7 +51,7 @@ if ($_GET['InChIKey']) {
     //Regex schema for the InChi key - reports errors helpfully, and also prevents
     //security issues by severly restricting the valid input domain (need ^ and $
     //to anchor to the entire string)
-    $InChiSchema = "/^[A-Z]{14}\-[A-Z]{10}\-[A-Z]$/";
+    $InChiSchema = "/^InChI=1[a-zA-Z0-9\/\>\<\!\,\-\(\)]*$/";
 
     if (preg_match($InChiSchema, $code)) {
         $escapedCode = escapeshellarg($code);
@@ -70,14 +70,14 @@ if ($_GET['InChIKey']) {
 
     } else {
         //The code is of an invalid schema, so redirect to the error page
-        header("Location: ./error.html");
+	header("Location: ./error.html");
         exit();
     }
 
 } else {
-    //The code field isn't set, so redirect to the error page
-    header("Location: ./error.html");
-    exit();
+	//The code field isn't set, so redirect to the error page
+    	header("Location: ./error.html");
+    	exit();
 }
 ?>
 
