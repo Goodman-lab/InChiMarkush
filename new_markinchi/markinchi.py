@@ -75,13 +75,99 @@ class MarkInChI(object):
     def replacement(self, smiles_core, substituent):
 
         # This function performs replacements on atoms "-"
+        iso_num = 0
         id = substituent.split("-")
         if "H" not in substituent:
             rank, main_atom, atom = tuple(id[0]) + tuple(id[1].split("@"))
         else:
-            rank, main_atom = tuple(id)
+            rank, atom = tuple(id)
         inchi = Chem.MolToInchi(Chem.MolFromSmiles(smiles_core))
-        line = inchi.split("/")[2].replace("c", "")
+        # Label the atom
+        if inchi.find("/i") == -1:  # no isotopic layer
+            if inchi.find("/f") == -1:  # no fixed layer
+                if inchi.find("/r") == -1:  # no organometallic layer
+                    inchi += "/i"+rank.split("H")[0]+"+50"  # case 1
+                else:
+                    # case 3
+                    isotope = "/i"+rank.split("H")[0]+"+50"
+                    index = inchi.find("/r")
+                    inchi = inchi[:index]+isotope+inchi[index:]
+            else:  # there is fixed layer
+                # case 2
+                isotope = "/i"+rank.split("H")[0]+"+50"
+                index = inchi.find("/f")
+                inchi = inchi[:index]+isotope+inchi[index:]
+        else:
+            index = inchi.find("/i")
+            indexf = inchi[index+2:].find("/")
+            sub = ""
+            if indexf == -1:
+                # isotopic layer is last layer
+                sub = ","+inchi[index+2:]
+            else:
+                # isotopic layer not last layer
+                sub = ","+inchi[index+2:index+2+indexf]
+            for i in range(0, len(sub)):
+                if sub[i] == ",":
+                    num = sub[i:].split(",")[1].split("+")[0]
+                    if num == rank:
+                        iso_num = int(sub[i:].split(",")[1].split("+")[0])
+                        index2 = sub[i+1:].find(",")
+                        if index2 != -1:
+                            isotope = rank.split("H")[0]+"+50"
+                            inchi = inchi[:index+1+i]+isotope+inchi[index2+i:]
+                            break
+                        else:
+                            isotope = rank.split("H")[0]+"+50"
+                            inchi = inchi[:index+1+i]+isotope+inchi[index+2+len(sub):]
+                            break
+                    else:
+                        if int(num) > int(rank.split("H")[0]):
+                            isotope = rank.split("H")[0]+"+50,"
+                            inchi = inchi[:index+2+i]+isotope+inchi[:index+2+i]
+                            break
+            else:  # if all numbers are lower we just add to the end of sub
+                isotope = ","+rank.split("H")[0]+"+50"
+                sub += isotope
+                inchi = inchi[:index]+sub+inchi[index+2+indexf:]
+        # At this point, the atom is labelled
+        # Now we should add a substituent if there is hydrogen
+        lab_smiles = Chem.MolToSmiles(Chem.rdinchi.InchiToMol(inchi)[0])
+        atom1 = self.find_atom(rank.split("H")[0], inchi.split("/")[1])
+        table = Chem.GetPeriodicTable()
+        atomic_mass = int(table.GetMostCommonIsotopeMass(atom1))
+        # determine if atom is lower_case or upper_case
+        upper = not lab_smiles.find(str(atomic_mass+50)+atom1) == -1
+        if rank.find("H") != -1:
+            sub_new = ""
+            sub_old = ""
+            index = 0
+            if upper:
+                sub_new = str(atomic_mass+iso_num)+atom1
+                sub_old = str(atomic_mass+50)+atom1
+                index = inchi.find(str(atomic_mass+50)+atom1)
+            else:
+                sub_new = str(atomic_mass+iso_num)+str.lower(atom1)
+                sub_old = str(atomic_mass+50)+str.lower(atom1)
+                index = lab_smiles.find(str(atomic_mass+50)+str.lower(atom1))
+            lab_smiles = lab_smiles.replace(sub_old, sub_new)
+            # remove their isotomic mass from a smiles if they exist
+            lab_smiles = Chem.MolToSmiles(Chem.rdinchi.InchiToMol(
+                                          Chem.MolToInchi(Chem.MolFromSmiles(lab_smiles)))[0])
+            index2 = lab_smiles[index:].find("]")
+            lab_smiles = lab_smiles[:index+index2+1]+"("+atom+")"+lab_smiles[index+index2+1:]
+
+        else:
+            if not upper:
+                atom = str.lower(atom)
+                atom1 = str.lower(atom1)
+
+            index = lab_smiles.find("["+str(atomic_mass+50)+atom1)
+            index2 = lab_smiles[index:].find("]")
+            lab_smiles = lab_smiles[:index]+atom+lab_smiles[index+index2+1:]
+
+        """
+        line = inchi.split("/")[2][1:]
         list_of_no = []
         for n in line.split("-"):
             if "(" in n:
@@ -117,7 +203,8 @@ class MarkInChI(object):
                             sc = smiles_core
                             smiles_core = sc[:count]+atom.upper()+sc[count+1:]
                 count += 1
-        return smiles_core
+        """
+        return lab_smiles
 
 
     def replace(self, smiles_core, substituent):
@@ -165,8 +252,9 @@ class MarkInChI(object):
             inchiplus_item = inchiplus_item[:-1]
         else:
             if "-" in molecule:
-                rank = molecule[0]
-                suffix = inchiplus_item[2:]
+                rank = molecule.split("-")[0]
+                index = inchiplus_item.find("-")
+                suffix = inchiplus_item[index+1:]
                 suffix_list = suffix.split("!")
                 atom = suffix_list[0]
                 inchiplus_item = ""
@@ -215,9 +303,10 @@ if __name__=="__main__":
         if len(inchiplus) > 1 and inchi.find("Te") != -1:  # need reordering
             inchiplus = inchi_obj.reorder(inchiplus_item, inchiplus)
         # Convert main inchi to smiles and run algorithm
+        print(inchiplus_item)
         molfrominchi = Chem.rdinchi.InchiToMol(inchiplus_item)
         smiles_core=Chem.MolToSmiles(molfrominchi[0])
         inchi_obj.list_of_inchi = []
         inchi_obj.no_run = 0
         inchi_obj.run(inchiplus, smiles_core)
-        #print(inchi_obj.list_of_inchi)
+        print(inchi_obj.list_of_inchi)
