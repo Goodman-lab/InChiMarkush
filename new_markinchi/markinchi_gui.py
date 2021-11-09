@@ -107,7 +107,7 @@ class MarkinchiGuiApp(object):
             inchi_obj.list_of_inchi = []
             inchi_obj.no_run = 0
             inchi_obj.label = label = Label()
-            inchiplus_item, inchi_obj.ranks = .label.label_inchi(inchiplus_item,
+            inchiplus_item, inchi_obj.ranks = label.label_inchi(inchiplus_item,
                                                                  inchiplus)
             if len(inchiplus) > 1 and inchi.find("Te") != -1:  # need reordering
                 inchiplus = inchi_obj.reorder(inchiplus_item, inchiplus)
