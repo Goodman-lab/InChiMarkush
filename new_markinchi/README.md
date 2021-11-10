@@ -14,11 +14,11 @@ the resources section below.
 
 This version was only tested on the cases covered by the 5 examples in the 17th May meeting document (see resource 1). Thus, there is a number of limitations including but not restricted to:
 
-1- Stereochemistry: this version of code doesn't treat the stereochemistry of newly formed centres and leaves them undefined.
+1- Stereochemistry: this version of code doesn't treat the stereochemistry of newly formed stereocentres and leaves them undefined.
 
-2- Nested variable groups: this version doesn't cover a variable group inside another variable group.
+2- Nested variable groups: this version doesn't cover the case of a variable group inside another variable group.
 
-3- Number of atoms in MarkInChI Core: as isotopic labelling is used to introduce a new canonical labelling system to the MarkInChI core, there is a limit to the rank of the atom being replaced that it doesn't exceed 116.
+3- Number of atoms in MarkInChI Core: as isotopic labelling is used to introduce a new canonical labelling system to the MarkInChI core, there is a limit to the inchi canonical rank of the atom being replaced that it doesn't exceed 116.
 
 ## Resources
 
