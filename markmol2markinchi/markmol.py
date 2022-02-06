@@ -44,7 +44,6 @@ class markmol(object):
                 self.connections.append(connection)
 
             new_content.append(new_line)
-        for line in new_content: print(line)
         return copy.deepcopy(new_content)
 
     def delete(self, content):
@@ -56,7 +55,6 @@ class markmol(object):
             b = not (line[0] == "M" and (line.find("END") == -1))
             if a and b:
                 new_content.append(line)
-        for line in new_content: print(line)
         return copy.deepcopy(new_content)
 
     def add(self, content):
@@ -66,13 +64,17 @@ class markmol(object):
         add_line = "$$$$\n\n\n\n"
         i = 0
         count = 1
+        atom_line = False
         for line in content:
             if i > 0 and count == int(self.connections[i-1]):
-                # must be 2D structure
-                if line.find("0.0000") != -1:
-                    index = line.find("0.0000")
-                    new_line = line[:index+11]+"8"+line[index+12:]
-                    new_content.append(new_line)
+                # must be mol V2000
+                if atom_line:
+                    if len(line) > 68:
+                        new_line = line[:35]+"8"+line[36:]
+                        new_content.append(new_line)
+                    else:
+                        atom_line = False
+                        new_content.append(line)
                 else:
                     new_content.append(line)
             else:
@@ -83,8 +85,8 @@ class markmol(object):
                 new_content.append(add_line)
             if line.find(".") != -1:
                 count += 1
-
-        for line in new_content: print(line)
+            if line.find("999 V2000") != -1:
+                atom_line = True
         return copy.deepcopy(new_content)
 
     def label(self, content):
@@ -94,7 +96,6 @@ class markmol(object):
         iso_line = f"M  ISO"
         iso_line += (3-len(p))*" "+p
         i = 1
-        print(f"Rpositions: {self.Rpositions}")
         for p in self.Rpositions:
             iso_line += (4-len(p))*" "+p+" "+str(130+i)
             i += 1
@@ -106,7 +107,6 @@ class markmol(object):
                 new_content.append(iso_line)
                 replace = False
             new_content.append(line)
-        for line in new_content: print(line)
         return copy.deepcopy(new_content)
 
     def relabel_core(self, inchi):
@@ -158,24 +158,18 @@ class markmol(object):
                 label_part = core_inchi[index+2:index+2+indexf]
             else:
                 label_part = core_inchi[index+2:]
-        print(label_part)
         for part in label_part.split(","):
             order.append(str(int(part.split("+")[1])-2))
-        print(order)
-        print(core_inchi)
         mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
         Rsubstituents = self.Rsubstituents
         for num in order:
             subs = Rsubstituents[int(num)-1]
-            print(f"len(subs): {len(subs)}")
             mark_inchi += "<>"
             for sub in subs:
-                print(2)
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
                     sub_inchi = zz.te_to_zz("InChI=1B/"+sub_inchi)
                     sub_inchi = "/".join(sub_inchi.split("/")[1:])
-                print(f"sub_inchi: {sub_inchi}")
                 mark_inchi += sub_inchi+"!"
             mark_inchi = mark_inchi[:-1]
         mark_inchi = mark_inchi.replace("InChI=1S/", "MarkInChI=1B/")
@@ -203,7 +197,6 @@ if __name__=="__main__":
     substituents = []
     for mol in supply:
         if mol is not None:
-            print(Chem.MolToSmiles(mol))
             substituents.append(mol)
     mark_obj.core_mol = copy.deepcopy(supply[0])
     i = 1
@@ -212,6 +205,4 @@ if __name__=="__main__":
         mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
         i += 1
     mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
-    print(mark_obj.Rsubstituents)
-    print(mark_obj.produce_markinchi())
     file.close()
