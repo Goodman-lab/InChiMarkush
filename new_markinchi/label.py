@@ -1,12 +1,17 @@
 from rdkit import Chem
 import copy
+from helper import helper
 
 # This module will be used to label atoms as isotopes.
 # This will also be able to find the position of an atom given its label
 # This will also contain other helpful functions
 
 class Label(object):
+
+    def __init__(self):
+        self.helper = helper()
     def label(self, inchi, rank, lab):
+        # rank, lab are strings
         # Label the atom
         if inchi.find("/i") == -1:  # no isotopic layer
             if inchi.find("/f") == -1:  # no fixed layer
@@ -77,7 +82,7 @@ class Label(object):
             10 is added to not get an isotope that exists for low ranks and
             using adding rank will make it canonical.
             This function returns the labelled inchi and a dictionary ranks
-            so labells can be obtained easily. """
+            so labels can be obtained easily. """
 
         ranks = {}  # dict {rank:label}
         new_inchi = inchi
@@ -97,7 +102,6 @@ class Label(object):
                             # add rank to dictionary ranks if doesn't exist
                             ranks[num] = int(num)+10+atomic_mass
                             new_inchi = self.label(new_inchi, num, str(int(num)+10))
-                            print(new_inchi)
                         else:
                             raise RuntimeError("Same atom replaced more than once")
                 else:
@@ -111,39 +115,106 @@ class Label(object):
                         new_inchi = self.label(inchi, num, str(int(num)+10))
                     else:
                         raise RuntimeError("Same atom replaced more than once")
+        # Now we label Te atoms:
+        if new_inchi.find("Te") != -1:
+            no, start_zz = self.helper.zz_no(new_inchi)
+            for i in range(0, no):
+                new_inchi = self.label(new_inchi, str(i+start_zz),
+                                       str(128+10+i+1))
         return new_inchi, ranks
 
     def delete_zz(self, mol):
 
-        # This function delete the first instance of Zz and return the new mol
+        # This function delete the instance of Zz with the lowest rank
+        # and returns the new mol
         index = 0
+        min_rank = 10000
         new_mol = copy.deepcopy(self.sanitize(mol))
-        for atom in Chem.RWMol(new_mol).GetAtoms():
-            if atom.GetSymbol == "Te":
+        rwmol = Chem.RWMol(new_mol)
+        for atom in rwmol.GetAtoms():
+            cn1 = atom.GetIsotope() < min_rank
+            cn2 = atom.GetSymbol() == "Te"
+            if  cn1 and cn2:
+                min_rank = atom.GetIsotope()
                 index = atom.GetIdx()
-                break
-        rwmol = Chem.RWMol(mol)
         rwmol.RemoveAtom(index)
         new_mol = rwmol.GetMol()
-        return copy.deepcopy(new_mol)
+        return copy.deepcopy(self.sanitize(new_mol))
 
-    def get_index(self, mol):
+    def get_index(self, mol, label):
 
-        # This function gets the index of the atom connected to first Te
-        # and deletes Te
+        # This function gets the index of the atom connected to Te with the
+        # lowest rank and deletes Te
         index = 0
         index1 = 1
         new_mol = copy.deepcopy(self.sanitize(mol))
-        for atom in mol.GetAtoms():
-            if atom.GetSymbol() == "Te":
+        min_rank = 100000000
+        rwmol = Chem.RWMol(mol)
+        for atom in rwmol.GetAtoms():
+            if atom.GetSymbol() == "Te" and atom.GetIsotope() < min_rank:
+                min_rank = atom.GetIsotope()
                 index1 = atom.GetIdx()
-                for i in reversed(range(0, index1)):
+                num = rwmol.GetNumAtoms()-1
+                for i in reversed(range(0, num)):
                     if mol.GetBondBetweenAtoms(i, index1) != None:
                         index = i
-        rwmol = Chem.RWMol(mol)
+        pre_label = rwmol.GetAtoms()[index].GetIsotope()
+        symbol = rwmol.GetAtoms()[index].GetSymbol()
+        # label connected atom by prelabel+label
+        post_label = 0
+        if pre_label == 0:
+            table = Chem.GetPeriodicTable()
+            atomic_mass = int(table.GetMostCommonIsotopeMass(symbol))
+            post_label = atomic_mass+label
+        else:
+            post_label = pre_label+label
+        rwmol.GetAtoms()[index].SetIsotope(post_label)
         rwmol.RemoveAtom(index1)
         new_mol = rwmol.GetMol()
-        return copy.deepcopy(new_mol), index
+        new_index = 0
+        for atom in new_mol.GetAtoms():
+            if atom.GetSymbol == symbol and atom.GetIsotope() == post_label:
+                new_index = atom.GetIdx()
+        return copy.deepcopy(new_mol), post_label
+
+    def combine(self, main_mol, sub_mol):
+
+        # label 30 for sub_mol, and label 35 for main_mol
+        sub_label = 0
+        if sub_mol.GetNumAtoms() > 1:
+            sub_mol, sub_label = self.get_index(sub_mol, 30)
+        else:
+            pre_label = sub_mol.GetAtoms()[0].GetIsotope()
+            post_label = 0
+            if pre_label == 0:
+                table = Chem.GetPeriodicTable()
+                atom = sub_mol.GetAtoms()[0].GetSymbol()
+                atomic_mass = int(table.GetMostCommonIsotopeMass(atom))
+                post_label = atomic_mass+30
+            else:
+                post_label = pre_label+30
+            sub_mol.GetAtoms()[0].SetIsotope(post_label)
+            sub_label = post_label
+        new_mol, main_label = self.get_index(main_mol, 35)
+        combo = Chem.CombineMols(sub_mol, new_mol)
+        edcombo = Chem.EditableMol(combo)
+        single = Chem.rdchem.BondType.SINGLE
+        sub_index = 0
+        main_index = 0
+        back_mol = edcombo.GetMol()
+        for atom in back_mol.GetAtoms():
+            if atom.GetIsotope() == sub_label:
+                sub_index = atom.GetIdx()
+                atom.SetIsotope(sub_label-30)
+            if atom.GetIsotope() == main_label:
+                main_index = atom.GetIdx()
+                atom.SetIsotope(main_label-35)
+        edcombo = Chem.EditableMol(back_mol)
+        edcombo.AddBond(sub_index, main_index, order=single)
+        final_mol = self.sanitize(edcombo.GetMol())
+        return copy.deepcopy(final_mol)
+
+
     def find_atom(self, rank, formula):
 
         # This function finds an atom given its canonical
@@ -175,7 +246,15 @@ class Label(object):
     def sanitize(self, mol):
         # there is some issues with RDKIT mol produced from inchi, while the
         # mol produced from SMILES seem to be fine.
-        return copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol)))
+        # This also sanitize isotopic labels eg. [ch2] -> c
+        new_mol = copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol)))
+        for atom in new_mol.GetAtoms():
+            table = Chem.GetPeriodicTable()
+            symbol = atom.GetSymbol()
+            atomic_mass = int(table.GetMostCommonIsotopeMass(symbol))
+            if atom.GetIsotope() == atomic_mass:
+                atom.SetIsotope(0)
+        return new_mol
 
     def find_isotope(self, inchi, rank):
 
@@ -194,6 +273,7 @@ class Label(object):
                 if rank2 == rank:
                     result = iso
         return result
+
     def sanitize_labels(self, ranks, inchi, mol):
 
         """ This function resets the fake isotopic labels of the atoms

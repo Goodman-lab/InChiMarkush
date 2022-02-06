@@ -155,4 +155,27 @@
       </object>
     </child>
   </object>
+  <object class="tk.Menu" id="menu1">
+    <property name="tearoff">false</property>
+    <child>
+      <object class="tk.Menuitem.Submenu" id="submenu1">
+        <property name="hidemargin">false</property>
+        <property name="label" translatable="yes">File</property>
+        <property name="tearoff">false</property>
+        <child>
+          <object class="tk.Menuitem.Command" id="command1">
+            <property name="command" type="command" cbtype="simple">open</property>
+            <property name="font">TkDefaultFont</property>
+            <property name="label" translatable="yes">Convert .sdf to MarkInChI</property>
+          </object>
+        </child>
+        <child>
+          <object class="tk.Menuitem.Command" id="command2">
+            <property name="command" type="command" cbtype="simple">quit</property>
+            <property name="label" translatable="yes">Exit</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
 </interface>
