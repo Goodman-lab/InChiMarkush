@@ -105,34 +105,7 @@ class MarkinchiGuiApp(object):
 
         """ This function converts a markinchi to a list of inchis"""
 
-        inchi_obj = MarkInChI()
-        zz = zz_convert()
-        inchi = inchi.replace("MarkInChI", "InChI", 1)
-        #inchi = inchi.replace("Zz", "Te")
-        # Check it is actually a markinchi
-        if inchi.find("<>") == -1:
-            # TODO: flag the user
-            print("Not a MarkInChI")
-        else:
-            inchiplus = inchi.split("<>")
-            # Get main inchi and substituents
-            inchiplus_item = inchiplus.pop(0)
-            if inchiplus_item.find("Zz") != -1:
-                inchiplus_item = zz.zz_to_te(inchiplus_item)
-
-            for sub in range(0, len(inchiplus)):
-                inchiplus[sub] = inchiplus[sub].replace("Zz", "Te")
-            inchi_obj.inchi = inchiplus_item
-            inchi_obj.list_of_inchi = []
-            inchi_obj.no_run = 0
-            inchi_obj.label = label = Label()
-            inchiplus_item, inchi_obj.ranks = label.label_inchi(inchiplus_item,
-                                                                 inchiplus)
-            # Convert main inchi to mol and run algorithm
-            main_mol = Chem.rdinchi.InchiToMol(inchiplus_item)[0]
-            # Sanitize (only in rdkit)
-            new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
-            inchi_obj.run(inchiplus, new_mol)
+        inchi_obj = MarkInChI(inchi)
         return copy.deepcopy(inchi_obj.list_of_inchi)
 
     def plot(self):
@@ -160,10 +133,16 @@ class MarkinchiGuiApp(object):
             content = file.readlines()
             mark_obj = markmol()
             zz = zz_convert()
-            mark_obj.Rpositions = []
+            mark_obj.help_label = Label()
+            mark_obj.atom_symbols = {}
+            mark_obj.Rpositions = []  # number of each Te atom
             mark_obj.Rsubstituents = []
-            mark_obj.ctabs = []
+            mark_obj.ctabs = []  # no. of each substituent after $RGP
             mark_obj.connections = []
+            mark_obj.list_of_atoms = {}
+            mark_obj.attachments = []
+            mark_obj.attach_ids = {}
+            mark_obj.no_atoms = 0
             content = mark_obj.convert(content)
             new_name = name.split(".")[0]+"_RDKIT.sdf"
             new_file = open(new_name, "w")
@@ -177,10 +156,13 @@ class MarkinchiGuiApp(object):
             mark_obj.core_mol = copy.deepcopy(supply[0])
             i = 1
             ctabs = mark_obj.ctabs
-            while i < len(mark_obj.ctabs):
+            print(f"ctabs: {ctabs}")
+            while i < len(ctabs):
                 mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
                 i += 1
-            mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
+            else:
+                if len(ctabs) > 0:
+                    mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
             print(mark_obj.produce_markinchi())
             self.entry.insert(0, mark_obj.produce_markinchi())
             file.close()

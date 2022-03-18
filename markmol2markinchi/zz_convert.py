@@ -268,9 +268,6 @@ class zz_convert(object):
             formula = formula[:indexf]+sub+formula[indexf:]
         return new_inchi
 
-
-
-
 if __name__ == "__main__":
     inchi = input("Please enter the inchi with Zz:")
     zz = zz_convert()

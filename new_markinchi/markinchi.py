@@ -7,6 +7,38 @@ from zz_convert import zz_convert
 
 class MarkInChI(object):
 
+    def __init__(self, inchi):
+
+        zz = zz_convert()
+        inchi = inchi.replace("MarkInChI", "InChI", 1)
+        # Check it is actually a markinchi
+        if inchi.find("<>") == -1:
+            print("Not a MarkInChI")
+        else:
+            inchiplus = inchi.split("<>")
+            # Get main inchi and substituents
+            inchiplus_item = inchiplus.pop(0)  # inchiplus_item = main_inchi
+            if inchiplus_item.find("Zz") != -1:
+                inchiplus_item = zz.zz_to_te(inchiplus_item)
+            # TODO: use zz_to_te instead
+            for sub in range(0, len(inchiplus)):
+                inchiplus[sub] = inchiplus[sub].replace("Zz", "Te")
+            self.inchi = inchiplus_item  # store original inchi
+            self.list_of_inchi = []  # list of produced single inchis
+            # create an instance of the labelling class
+            self.label = label = Label()
+            # isotopically label the inchi where replacements will occur
+            inchiplus_item, self.ranks = label.label_inchi(inchiplus_item,
+                                                                inchiplus)
+            # Convert main inchi to mol
+            main_mol = Chem.rdinchi.InchiToMol(inchiplus_item)[0]
+            # Sanitize (only in rdkit)
+            new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
+            # run alogrithm and then print the resulted list of single inchis
+            self.run(inchiplus, new_mol)
+            print(self.list_of_inchi)
+            print(f"Number of inchi produced: {len(self.list_of_inchi)}")
+
     def replacement(self, main_mol, substituent):
 
         # This function performs replacements on atoms "-"
@@ -172,34 +204,5 @@ class MarkInChI(object):
 if __name__=="__main__":
     # Only run the code below if this class is run directly by python not gui
     # Correct InChI syntax to work with rdkit
-    inchi_obj = MarkInChI()
-    zz = zz_convert()
     inchi = input("Please enter the MarkInChI: ")
-    inchi = inchi.replace("MarkInChI", "InChI", 1)
-    # Check it is actually a markinchi
-    if inchi.find("<>") == -1:
-        print("Not a MarkInChI")
-    else:
-        inchiplus = inchi.split("<>")
-        # Get main inchi and substituents
-        inchiplus_item = inchiplus.pop(0)  # inchiplus_item = main_inchi
-        if inchiplus_item.find("Zz") != -1:
-            inchiplus_item = zz.zz_to_te(inchiplus_item)
-        # TODO: use zz_to_te instead
-        for sub in range(0, len(inchiplus)):
-            inchiplus[sub] = inchiplus[sub].replace("Zz", "Te")
-        inchi_obj.inchi = inchiplus_item  # store original inchi
-        inchi_obj.list_of_inchi = []  # list of produced single inchis
-        # create an instance of the labelling class
-        inchi_obj.label = label = Label()
-        # isotopically label the inchi where replacements will occur
-        inchiplus_item, inchi_obj.ranks = label.label_inchi(inchiplus_item,
-                                                            inchiplus)
-        # Convert main inchi to mol
-        main_mol = Chem.rdinchi.InchiToMol(inchiplus_item)[0]
-        # Sanitize (only in rdkit)
-        new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
-        # run alogrithm and then print the resulted list of single inchis
-        inchi_obj.run(inchiplus, new_mol)
-        print(inchi_obj.list_of_inchi)
-        print(f"Number of inchi produced: {len(inchi_obj.list_of_inchi)}")
+    inchi_obj = MarkInChI(inchi)
