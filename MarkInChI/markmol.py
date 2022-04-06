@@ -401,14 +401,16 @@ class markmol(object):
         mark_inchi = ""
         if core_inchi.find("Te") != -1:
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
+            print(f"core_inchi_2: {core_inchi}")
         else:
             mark_inchi = self.relabel_core(core_inchi)
+            print(f"core_inchi_2: {core_inchi}")
         Rsubstituents = self.Rsubstituents
         for num in order:
             ind = self.Rpositions.index(num)
             subs = Rsubstituents[ind]
             sub_inchis = []
-            mark_inchi += "<>"
+            mark_inchi += "<M>"
             for sub in subs:
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
@@ -428,7 +430,7 @@ class markmol(object):
             print(self.list_of_atoms)
             atom_list = self.list_of_atoms[ind]
             atom_list.sort()
-            part += "<>"
+            part += "<M>"
             lab = replace_order[ind]
             part += lab+"-"
             for atom in atom_list:
@@ -437,6 +439,7 @@ class markmol(object):
         print(f"list of atoms part: {part}")
         mark_inchi += part
         #### variable attachments
+        print(f"mark_inchi: {mark_inchi}")
         var_part = ""
         atom_ids = self.attach_ids
         for i in range(0, len(list(atom_ids.keys()))):
@@ -444,7 +447,7 @@ class markmol(object):
             symbol = atom_ids[mol_rank]
             subs = []
             sub_inchis = []
-            var_part += "<>"
+            var_part += "<M>"
             for mi in self.attachments[i]:
                 print(f"self.attachments: {self.attachments}")
                 other_symbol = self.atom_symbols[int(mi)]

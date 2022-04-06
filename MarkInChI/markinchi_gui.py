@@ -1,7 +1,12 @@
-import os, sys
+import os, sys, traceback
 import tkinter as tk
 import tkinter.ttk as ttk
-from tkinter import ANCHOR, PhotoImage, NW, Scrollbar, END
+# Import pygubu objects necessary for pyinstaller to work
+import pygubu.builder.tkstdwidgets
+import pygubu.builder.ttkstdwidgets
+import pygubu.builder.widgets.scrollbarhelper
+import pygubu.builder.widgets.tkscrollbarhelper
+from tkinter import messagebox, ANCHOR, PhotoImage, NW, Scrollbar, END
 from PIL import ImageTk,Image
 import pygubu
 from tkinter.filedialog import askopenfile  # convert mol to markinchi
@@ -14,8 +19,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'markmol2markinchi
 from zz_convert import zz_convert
 from markmol import markmol
 
-PROJECT_PATH = os.path.abspath(os.path.dirname(__file__))
-PROJECT_UI = os.path.join(PROJECT_PATH, "markinchi_gui.ui")
+try:
+    CDIR = os.path.abspath(os.path.dirname(__file__))
+except NameError:
+    CDIR = os.path.dirname(os.path.abspath(sys.argv[0]))
+PROJECT_UI = os.path.join(CDIR, "markinchi_gui.ui")
 
 class MarkinchiGuiApp(object):
     def __init__(self, master=None):
@@ -23,7 +31,7 @@ class MarkinchiGuiApp(object):
         # Get the pygubu builder that will build tkinter widgets from
         # XML file
         self.builder = builder = pygubu.Builder()
-        builder.add_resource_path(PROJECT_PATH)
+        builder.add_resource_path(CDIR)
         builder.add_from_file(PROJECT_UI)
         self.mainwindow = builder.get_object('frame1', master)
         self.master = master
@@ -32,8 +40,9 @@ class MarkinchiGuiApp(object):
         # build menu
         my_menu = builder.get_object('menu1')
         master.config(menu=my_menu)
-        # build entry
+        # build entry and listbox
         self.entry = builder.get_object('entry1')
+        self.listbox = self.builder.get_object('listbox1')
         # Build the canvases from the XML file.
         self.my_canvas = builder.get_object('canvas1')
         self.my_canvas.configure(bg='white')
@@ -90,15 +99,28 @@ class MarkinchiGuiApp(object):
             of single inchis and then displays them in the listbox"""
 
         entry = self.entry
-        self.listbox = self.builder.get_object('listbox1')
         self.listbox.delete(0, END)
         markinchi = entry.get()
-        list_of_inchi = self.get_inchis(markinchi)
-        i = 1
-        print(f"Number of inchi produced: {len(list_of_inchi)}")
-        for inchi in list_of_inchi:
-            self.listbox.insert(i, inchi)
-            i += 1
+        c_a = markinchi.find("<>") != -1
+        c_b = markinchi.find("MarkInChI") == -1
+        if markinchi.find("<M>") == -1 or c_a or c_b:
+            # Error Message
+            msg = "Please enter a valid MarkInChI with correct separators <M>"
+            messagebox.showerror("Error", msg)
+        else:
+            try:
+                list_of_inchi = self.get_inchis(markinchi)
+                i = 1
+                print(f"Number of inchi produced: {len(list_of_inchi)}")
+                for inchi in list_of_inchi:
+                    self.listbox.insert(i, inchi)
+                    i += 1
+            except AttributeError as msg:
+                ex_type, ex_value, ex_traceback = sys.exc_info()
+                trace_back = traceback.extract_tb(ex_traceback)
+                msg1 = "please see error message below:\n"
+                messagebox.showerror("Error",
+                                     msg1+repr(msg)+"\n"+str(trace_back))
 
 
     def get_inchis(self, inchi):
@@ -124,7 +146,8 @@ class MarkinchiGuiApp(object):
 
     def open(self):
 
-        self.entry.delete(1, 1000)
+        self.entry.delete(0, END)
+        self.listbox.delete(0, END)
         path = os.getcwd()
         file = askopenfile(mode='r', initialdir=path, defaultextension='.sdf',
                            filetypes=[("SDF file", ".sdf")])
@@ -163,9 +186,16 @@ class MarkinchiGuiApp(object):
             else:
                 if len(ctabs) > 0:
                     mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
-            print(mark_obj.produce_markinchi())
-            self.entry.insert(0, mark_obj.produce_markinchi())
+            try:
+                print(mark_obj.produce_markinchi())
+                self.entry.insert(0, mark_obj.produce_markinchi())
+            except IndexError:
+                msg = "Please enter a valid V2000 Markush sdf file"
+                messagebox.showerror("Error", msg)
             file.close()
+        else:
+            msg = "Please choose a file"
+            messagebox.showerror("Error", msg)
 
     def quit(self):
 

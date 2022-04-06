@@ -1,5 +1,6 @@
 from rdkit import Chem
 import copy
+import numpy
 from helper import helper
 
 # This module will be used to label atoms as isotopes.
@@ -107,12 +108,14 @@ class Label(object):
                 else:
                     # only replacements with no variable attachments
                     num = molecule.split("-")[0].split("H")[0]
+                    print(f"num: {num}")
                     table = Chem.GetPeriodicTable()
                     atom = self.find_atom(num, inchi.split("/")[1])
                     atomic_mass = int(table.GetMostCommonIsotopeMass(atom))
                     if num not in ranks.keys():
                         ranks[num] = int(num)+10+atomic_mass
-                        new_inchi = self.label(inchi, num, str(int(num)+10))
+                        new_inchi = self.label(new_inchi, num, str(int(num)+10))
+                        print(f"new_inchi: {new_inchi}")
                     else:
                         raise RuntimeError("Same atom replaced more than once")
         # Now we label Te atoms:
@@ -255,6 +258,33 @@ class Label(object):
             if atom.GetIsotope() == atomic_mass:
                 atom.SetIsotope(0)
         return new_mol
+
+    def sanitize_charges(self, mol):
+
+
+        """
+        list_of_indices = []
+        item = "["
+        for index, elem in enumerate(list(smiles)):
+            if elem == item:
+                list_of_indices.append(item)
+        i = 0
+        """
+
+        mol.UpdatePropertyCache(strict=False)
+        table = Chem.GetPeriodicTable()
+        for atom in mol.GetAtoms():
+            atomic_number = atom.GetAtomicNum()
+            valence = atom.GetTotalValence()
+            default_valence = table.GetDefaultValence(atomic_number)
+            electrons = table.GetNOuterElecs(atomic_number)
+            if valence != default_valence:
+                print(f"Warning: atom {atom.GetSymbol} not in default valence")
+            num = (electrons-valence)
+            charge = int((num%2)*numpy.sign(num))
+            if atom.GetSymbol() != "C":
+                atom.SetFormalCharge(charge)
+        return copy.deepcopy(mol)
 
     def find_isotope(self, inchi, rank):
 

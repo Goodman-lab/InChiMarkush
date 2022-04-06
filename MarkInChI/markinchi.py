@@ -12,10 +12,10 @@ class MarkInChI(object):
         zz = zz_convert()
         inchi = inchi.replace("MarkInChI", "InChI", 1)
         # Check it is actually a markinchi
-        if inchi.find("<>") == -1:
+        if inchi.find("<M>") == -1:
             print("Not a MarkInChI")
         else:
-            inchiplus = inchi.split("<>")
+            inchiplus = inchi.split("<M>")
             # Get main inchi and substituents
             inchiplus_item = inchiplus.pop(0)  # inchiplus_item = main_inchi
             if inchiplus_item.find("Zz") != -1:
@@ -30,11 +30,15 @@ class MarkInChI(object):
             # isotopically label the inchi where replacements will occur
             inchiplus_item, self.ranks = label.label_inchi(inchiplus_item,
                                                                 inchiplus)
+            print(f"after labelling: {inchiplus_item}")
+            print(f"ranks: {self.ranks}")
             # Convert main inchi to mol
+            print(f"core_inchi: {inchiplus_item}")
             main_mol = Chem.rdinchi.InchiToMol(inchiplus_item)[0]
             # Sanitize (only in rdkit)
             new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
             # run alogrithm and then print the resulted list of single inchis
+            self.run_count = 0
             self.run(inchiplus, new_mol)
             print(self.list_of_inchi)
             print(f"Number of inchi produced: {len(self.list_of_inchi)}")
@@ -67,6 +71,9 @@ class MarkInChI(object):
             if "H" not in rank:
                 # get isotopic label of atom being replaced
                 num = int(self.ranks[rank])
+                print(f"ranks: {self.ranks}")
+                print(f"num: {num}")
+                print(f"symbol: {atom}")
                 for mol_atom in new_mol.GetAtoms():
                     cn1 = mol_atom.GetIsotope() == num
                     cn2 = mol_atom.GetSymbol() == str.upper(atom)
@@ -81,6 +88,9 @@ class MarkInChI(object):
             else:
                 # get isotopic label of atom being replaced
                 num = int(self.ranks[rank[:-1]])
+                # smiles = Chem.MolToSmiles(new_mol)
+                # smiles.replace("[C]","C")
+                # new_mol = Chem.MolFromSmiles(smiles)
                 rwmol = Chem.RWMol(new_mol)
                 new_rwmol = copy.deepcopy(rwmol)
                 for mol_atom in rwmol.GetAtoms():
@@ -97,6 +107,8 @@ class MarkInChI(object):
                         single = Chem.rdchem.BondType.SINGLE
                         new_rwmol.AddBond(idx, add_index, order=single)
                         new_mol = copy.deepcopy(new_rwmol.GetMol())
+        print(f"new_mol: {Chem.MolToSmiles(new_mol)}")
+        new_mol = self.label.sanitize_charges(new_mol)
         return copy.deepcopy(new_mol)
 
     def replace(self, main_mol, substituent):
@@ -130,6 +142,8 @@ class MarkInChI(object):
 
         # Algorithm
         # Get first list of substituents and substitute in order
+        self.run_count += 1
+        print(f"inchiplus: {inchiplus} - {self.run_count}")
         inchiplus_item = inchiplus.pop(0)  # first R group or change
         # Treat attachment cases
         attachments = []
@@ -174,23 +188,29 @@ class MarkInChI(object):
                 inchiplus_item = inchiplus_item[:-1]  # remove "!" at the end
         # split instances of R group separated by "!"
         grouplist=inchiplus_item.split("!")
+        print(f"grouplist: {grouplist}")
         for substituent in grouplist:
             if substituent == "H":  # make H implicit
                 substituent = ""
             new_mol = copy.deepcopy(main_mol)
             new_inchi = ""
+            print(f"subsitutent: {substituent}")
+            print(f"before substitution: {Chem.MolToSmiles(new_mol)}")
             if "-" in substituent.split("/")[0]:
                 # replace normal atom "-"
                 new_mol = self.replacement(new_mol, substituent)
+                print(f"after substitution: {Chem.MolToSmiles(new_mol)}")
             else:
                 # replace Zz atom
                 new_mol = self.replace(new_mol, substituent)
+                print(f"after substitution: {Chem.MolToSmiles(new_mol)}")
             if len(inchiplus) == 0:  # if finished substitutions
                 # produce inchi
                 new_mol = copy.deepcopy(self.label.sanitize_labels(self.ranks,
                                                                   self.inchi,
                                                                   new_mol))
                 new_inchi = Chem.MolToInchi(self.label.sanitize(new_mol))
+                print(f"new_inchi: {new_inchi}")
                 # if it is a new inchi then put it in the list
                 #if new_inchi not in self.list_of_inchi:
                 self.list_of_inchi.append(new_inchi)
