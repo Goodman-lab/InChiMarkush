@@ -212,8 +212,8 @@ class MarkInChI(object):
                 new_inchi = Chem.MolToInchi(self.label.sanitize(new_mol))
                 print(f"new_inchi: {new_inchi}")
                 # if it is a new inchi then put it in the list
-                #if new_inchi not in self.list_of_inchi:
-                self.list_of_inchi.append(new_inchi)
+                if new_inchi not in self.list_of_inchi:
+                    self.list_of_inchi.append(new_inchi)
             else:
                 # There is still more substitutions then continue
                 # with current mol and inchiplus
