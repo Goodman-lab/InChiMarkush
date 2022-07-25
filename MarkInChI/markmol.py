@@ -1,4 +1,5 @@
 import copy
+
 from rdkit import Chem
 from zz_convert import zz_convert
 from label import Label
@@ -17,6 +18,10 @@ class markmol(object):
         new_content = self.delete(new_content)
         new_content = self.add(new_content)
         new_content = self.label(new_content)
+
+        if self.reassignC == True:
+            new_content = self.reassign(new_content)
+
         return copy.deepcopy(new_content)
 
     def replaceR(self, content):
@@ -122,24 +127,27 @@ class markmol(object):
         # find the attachments for each bond, store that information,
         # and link it to the right atom.
         # find the indices of the atoms bound to the 'empty' atoms
-        atom_inds = []  # indices of empty atoms
+        # count the number of atom lines
+        self.atom_inds = []  # indices of empty atoms
         attachments = []
         bonds = []  # store the block of bonds
         real_bonds = {}
         atom_line = False
         i = 0
+        self.no_atomlines = 0
         bond_line = False
         for line in content:
             if atom_line:
                 i += 1
                 # get atom symbols in core
                 if len(line) > 68:
+                    self.no_atomlines += 1
                     if len(line[31:34].split()) > 0:
                         self.atom_symbols[i] = line[31:34].split()[0]
                     else:
                         self.atom_symbols[i] = "empty"
                     if line[31] == " ":
-                        atom_inds.append(str(i))  # store empty atom index
+                        self.atom_inds.append(str(i))  # store empty atom index
                 else:
                     # atoms' block is finished and bonds' block begins
                     atom_line = False
@@ -160,9 +168,20 @@ class markmol(object):
             if line.find("999 V2000") != -1:
                 atom_line = True
 
+        # Atoms need to be reassign if there is more than one placed after each empty atom line
+        # (else labels higher than number of atoms)
+        emptyatom_iterate = 1
+        self.reassignC = False
+        for index in self.atom_inds:
+            if self.no_atomlines-(2*(len(self.atom_inds)-emptyatom_iterate)+1) == int(index):
+                emptyatom_iterate += 1
+            else:
+                self.reassignC = True
+                break
+
         # store the bond between the empty atom and the real attachment atom.
         for b in bonds:
-            for ind in atom_inds:
+            for ind in self.atom_inds:
                 if b.split()[0] == ind:
                     real_bonds[ind] = b.split()[1]
                 else:
@@ -174,7 +193,7 @@ class markmol(object):
         # AND the number of bonds on the top, delete 'empty atoms' and atoms
         # that are bound to them (variable-bond atoms), and corresponding bonds
         atom_ids = {}  # dict of number:atom.
-        no = len(atom_inds)
+        no = len(self.atom_inds)
         new_content = []
         allow_change = True
         atom_line = False
@@ -243,7 +262,7 @@ class markmol(object):
                 new_content += content[file_count+1:]
                 break
             file_count += 1
-        print(f"atom_inds: {atom_inds}")
+        print(f"atom_inds: {self.atom_inds}")
         print(f"attachments: {attachments}")
         print(f"real_bonds: {real_bonds}")
         print(f"atom_ids: {atom_ids}")
@@ -251,7 +270,8 @@ class markmol(object):
         self.attachments = attachments
         self.attach_ids = atom_ids
         self.no_atoms = no_atoms
-        #new_content = self.label_attachments(copy.deepcopy(new_content))
+        self.content = content
+
         return copy.deepcopy(new_content)
 
     def label_attachments(self, content):
@@ -369,6 +389,67 @@ class markmol(object):
                 else:
                     sub_inchi = Chem.MolToSmiles(rwmol)
         return sub_inchi
+
+    def reassign(self, new_content):
+
+        # Assigns lower numbers to atoms that are in the molfile after empty atoms and won't be deleted
+        # Create dictionary of the changes in the old and new numbering
+        # Renumber connectivity in the molfile and atoms in atom_symbols
+
+        extraatom_inds = []
+        for atom in self.atom_inds:
+            i = 0
+            while self.atom_symbols[int(atom) + 2 + i] != 'empty' and int(atom) + 2 + i <= self.no_atomlines:
+                extraatom_inds.append(str(int(atom) + 2 + i))
+                if int(atom) + 2 + i == self.no_atomlines:
+                    break
+                i += 1
+        newextra_inds = list(range(int(self.atom_inds[0]), int(self.atom_inds[0]) + len(extraatom_inds), 1))
+        newextra_inds = [str(x) for x in newextra_inds]
+        # strings = [str(x) for x in ints]
+        self.relabel_dict = dict(zip(extraatom_inds, newextra_inds))
+
+        for key in self.relabel_dict.keys():
+            while len(key) > len(self.relabel_dict[key]):
+                self.relabel_dict[key] = " " + self.relabel_dict[key]
+
+        for l in range(4 + self.no_atomlines, len(self.content)):
+            line = self.content[l]
+            for key in self.relabel_dict.keys():
+                # = relabel_dict[key]
+                line = line.replace(key, self.relabel_dict[key])
+                # print(line)
+            self.content[l] = line
+
+        print(f"relabel_dict: {self.relabel_dict}")
+
+        for l in range(4 + self.no_atomlines, len(new_content)):
+            line = new_content[l]
+            for key in self.relabel_dict.keys():
+                line = line.replace(key, self.relabel_dict[key])
+
+            new_content[l] = line
+
+        atom_values = []
+        items = self.atom_symbols.items()
+        for item in items:
+            atom_values.append(item[1])
+
+        m = 0
+        while m < len(atom_values):
+            if atom_values[m] == 'empty':
+                del atom_values[m]
+                del atom_values[m+1]
+            m += 1
+
+        atom_keys = list(range(1,len(atom_values)+1,1))
+
+        self.atom_symbols = dict(zip(atom_keys, atom_values))
+        print(f"atom_symbols: {self.atom_symbols}")
+
+        return copy.deepcopy(new_content)
+
+
     def produce_markinchi(self):
 
         # R groups
