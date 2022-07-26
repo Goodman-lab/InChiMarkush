@@ -180,7 +180,7 @@ class markmol(object):
                 break
 
         # store the bond between the empty atom and the real attachment atom.
-        for b in bonds:
+        for b in bonds:wdo
             for ind in self.atom_inds:
                 if b.split()[0] == ind:
                     real_bonds[ind] = b.split()[1]
@@ -413,22 +413,14 @@ class markmol(object):
             while len(key) > len(self.relabel_dict[key]):
                 self.relabel_dict[key] = " " + self.relabel_dict[key]
 
-        for l in range(4 + self.no_atomlines, len(self.content)):
-            line = self.content[l]
-            for key in self.relabel_dict.keys():
-                # = relabel_dict[key]
-                line = line.replace(key, self.relabel_dict[key])
-                # print(line)
-            self.content[l] = line
-
         print(f"relabel_dict: {self.relabel_dict}")
 
-        for l in range(4 + self.no_atomlines, len(new_content)):
+        for l in range(4, len(new_content)):
             line = new_content[l]
-            for key in self.relabel_dict.keys():
-                line = line.replace(key, self.relabel_dict[key])
-
-            new_content[l] = line
+            if len(line) == 21 and line.find("M") == -1:
+                for key in self.relabel_dict.keys():
+                    line = line.replace(key, self.relabel_dict[key])
+                new_content[l] = line
 
         atom_values = []
         items = self.atom_symbols.items()
