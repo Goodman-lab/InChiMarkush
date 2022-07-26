@@ -180,7 +180,7 @@ class markmol(object):
                 break
 
         # store the bond between the empty atom and the real attachment atom.
-        for b in bonds:wdo
+        for b in bonds:
             for ind in self.atom_inds:
                 if b.split()[0] == ind:
                     real_bonds[ind] = b.split()[1]
