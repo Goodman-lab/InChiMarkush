@@ -1,4 +1,5 @@
 import copy
+import sys
 
 from rdkit import Chem
 from zz_convert import zz_convert
@@ -271,6 +272,8 @@ class markmol(object):
         self.attach_ids = atom_ids
         self.no_atoms = no_atoms
         self.content = content
+        self.bonds = bonds
+        self.large_var_attach(content)
 
         return copy.deepcopy(new_content)
 
@@ -417,7 +420,7 @@ class markmol(object):
 
         for l in range(4, len(new_content)):
             line = new_content[l]
-            if len(line) == 21 and line.find("M") == -1:
+            if line in self.bonds:
                 for key in self.relabel_dict.keys():
                     line = line.replace(key, self.relabel_dict[key])
                 new_content[l] = line
@@ -441,6 +444,61 @@ class markmol(object):
 
         return copy.deepcopy(new_content)
 
+    def large_var_attach(self, new_content):
+        # Transforms variable attachment to R group if the substituent is larger than XHn (XHn = CH3, NH2, OH...)
+        bonds = self.bonds
+
+        for index in self.atom_inds:
+            group_atoms = []
+            save_bonds = []
+            for b in bonds:
+                if index == b.split()[0]:
+                    other_atom = b.split()[1]
+                    group_atoms.append(other_atom)
+                    #save_bond = bonds.pop(bonds.index(b))
+                    #save_bonds.append(save_bond)
+                    save_bonds.append(b)
+                    #print(other_atom)
+                    #print(bonds)
+                    break
+
+            for s in save_bonds:
+                if s in bonds:
+                    bonds.pop(bonds.index(s))
+
+            bonded_atoms = []
+            while other_atom in str(bonds):
+                new_save_bonds = []
+                for b in bonds:
+                    if b.split()[0] == other_atom:
+                        bonded = b.split()[1]
+                        #save_bond = bonds.pop(bonds.index(b))
+                        bonded_atoms.append(bonded)
+                        if bonded not in group_atoms:
+                            group_atoms.append(bonded)
+                        #save_bonds.append(save_bond)
+                        new_save_bonds.append(b)
+                        #print(bonded_atoms)
+                    elif b.split()[0] == other_atom:
+                        bonded = b.split()[0]
+                        #save_bond = bonds.pop(bonds.index(b))
+                        bonded_atoms.append(bonded)
+                        if bonded not in group_atoms:
+                            group_atoms.append(bonded)
+                        #save_bonds.append(save_bond)
+                        new_save_bonds.append(b)
+                        #print(bonded_atoms)
+
+                for s in new_save_bonds:
+                    if s in bonds:
+                        bonds.pop(bonds.index(s))
+
+                save_bonds = save_bonds + new_save_bonds
+                other_atom = bonded_atoms[0]
+                bonded_atoms.pop(0)
+
+            print(group_atoms)
+        sys.exit()
 
     def produce_markinchi(self):
 
