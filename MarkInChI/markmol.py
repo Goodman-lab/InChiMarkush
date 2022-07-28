@@ -14,11 +14,26 @@ class markmol(object):
 
         # This function converts a normal markush SDF file to RDKIT compatible
         # SDF file. Input: list. Output: list.
+        self.fixed_V2000line = True
+        self.add_blocks = False
         new_content = self.replaceR(content)
         new_content = self.var_attach(new_content)
         new_content = self.delete(new_content)
         new_content = self.add(new_content)
         new_content = self.label(new_content)
+
+        if self.add_blocks == True:
+            new_content = self.build_blocks(new_content)
+        print("BLA")
+
+        #import sys
+
+        new_file = open("testoutput.txt", "w")
+        new_file.writelines(new_content)
+        new_file.close()
+
+        #print(new_content)
+        sys.exit()
 
         if self.reassignC == True:
             new_content = self.reassign(new_content)
@@ -133,6 +148,7 @@ class markmol(object):
         attachments = []
         bonds = []  # store the block of bonds
         real_bonds = {}
+        self.save_atoms_lines = []
         atom_line = False
         i = 0
         self.no_atomlines = 0
@@ -143,6 +159,7 @@ class markmol(object):
                 # get atom symbols in core
                 if len(line) > 68:
                     self.no_atomlines += 1
+                    self.save_atoms_lines.append(line)
                     if len(line[31:34].split()) > 0:
                         self.atom_symbols[i] = line[31:34].split()[0]
                     else:
@@ -231,7 +248,7 @@ class markmol(object):
                     atom_line = False
                     new_content.append(line)
             else:
-                if line.find("999 V2000") != -1 and allow_change:
+                if line.find("999 V2000") != -1 and allow_change and self.fixed_V2000line:
                     # adjust top core mol statement (e.g. no of atoms, etc.)
                     atom_line = True
                     no_atoms = int(line.split()[0])-2*no
@@ -273,7 +290,10 @@ class markmol(object):
         self.no_atoms = no_atoms
         self.content = content
         self.bonds = bonds
-        self.large_var_attach(content)
+        new_content = self.large_var_attach(new_content)
+        #print(new_content)
+        #print("BLA")
+        #self.add_blocks = True
 
         return copy.deepcopy(new_content)
 
@@ -447,10 +467,19 @@ class markmol(object):
     def large_var_attach(self, new_content):
         # Transforms variable attachment to R group if the substituent is larger than XHn (XHn = CH3, NH2, OH...)
         bonds = self.bonds
+        atom_blocks = []
+        total_atoms = self.no_atoms
+        old_numbers = list(range(1, total_atoms + 1, 1))
+        main_numbers = [str(x) for x in old_numbers]
+        main_numbers = list(set(main_numbers) - set(self.atom_inds))
 
+        # For each empty atom check to what it is connected
+        # Then find all the connections within the attachments
         for index in self.atom_inds:
             group_atoms = []
             save_bonds = []
+
+            # Finding bonds to empty atoms
             for b in bonds:
                 if index == b.split()[0]:
                     other_atom = b.split()[1]
@@ -458,15 +487,16 @@ class markmol(object):
                     #save_bond = bonds.pop(bonds.index(b))
                     #save_bonds.append(save_bond)
                     save_bonds.append(b)
-                    #print(other_atom)
-                    #print(bonds)
                     break
 
             for s in save_bonds:
                 if s in bonds:
                     bonds.pop(bonds.index(s))
 
+            save_bonds = []
             bonded_atoms = []
+
+            # Finding all bonds within the attachment
             while other_atom in str(bonds):
                 new_save_bonds = []
                 for b in bonds:
@@ -478,7 +508,6 @@ class markmol(object):
                             group_atoms.append(bonded)
                         #save_bonds.append(save_bond)
                         new_save_bonds.append(b)
-                        #print(bonded_atoms)
                     elif b.split()[0] == other_atom:
                         bonded = b.split()[0]
                         #save_bond = bonds.pop(bonds.index(b))
@@ -487,7 +516,6 @@ class markmol(object):
                             group_atoms.append(bonded)
                         #save_bonds.append(save_bond)
                         new_save_bonds.append(b)
-                        #print(bonded_atoms)
 
                 for s in new_save_bonds:
                     if s in bonds:
@@ -497,8 +525,66 @@ class markmol(object):
                 other_atom = bonded_atoms[0]
                 bonded_atoms.pop(0)
 
+            no_of_atoms = len(group_atoms)
+            no_of_bonds = len(save_bonds)
+            self.no_atoms -= no_of_atoms - 1
+            group_atoms.sort(key=float)
             print(group_atoms)
-        sys.exit()
+
+            # Putting together the coordinate line block of the attachment
+            atom_subblock = []
+            for atom in group_atoms:
+                atom_subblock.append(self.save_atoms_lines[int(atom)-1])
+            atom_blocks += atom_subblock
+
+            new_numbers = list(range(1, len(group_atoms) + 1, 1))
+            block_dict = dict(zip(group_atoms, new_numbers))
+            print(block_dict)
+
+            for b in save_bonds:
+                l = save_bonds.index(b)
+                for key in block_dict:
+                    b = b.replace(key, str(block_dict[key]))
+                save_bonds[l] = b
+
+            main_numbers = list (set(main_numbers) - set(group_atoms))
+            #print(save_bonds)
+
+        # Creating the initial line
+        self.bonds = bonds
+        no_bonds = len(self.bonds)
+        first_line = new_content[3]
+        atom_part = (3 - len(str(self.no_atoms))) * " " + str(self.no_atoms)
+        bond_part = (3 - len(str(no_bonds))) * " " + str(no_bonds)
+        new_line = atom_part + bond_part + "  " + first_line[8:]
+        new_content[3] = new_line
+        self.fixed_V2000line = False
+
+        new_content = self.build_blocks(new_content, atom_blocks)
+
+       # Creating dictionary for main block
+        main_numbers.sort(key=float)
+        main_new = list(range(1, len(main_numbers) + 1, 1))
+        main_new = [str(x) for x in main_new]
+        self.main_dict = dict(zip(main_numbers, main_new))
+        print(self.main_dict)
+
+        self.add_blocks = False
+
+
+        return copy.deepcopy(new_content)
+
+    def build_blocks(self, new_content, atom_blocks):
+        # For now filtering the main block not to contain the attachment atoms
+        # TODO: Check if the empty atoms are deleted (but I think they are)
+        # Later also will translate the main block?
+        # And build the small blocks for attachments
+
+        for line in atom_blocks:
+            if line in new_content:
+                new_content.pop(new_content.index(line))
+
+        return copy.deepcopy(new_content)
 
     def produce_markinchi(self):
 
