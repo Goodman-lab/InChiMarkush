@@ -295,6 +295,7 @@ class markmol(object):
             for bond in self.bonds:
                 if bond.split()[0] == next_atom:
                     self.large_substituent = True
+                    self.ctabs = [1]
                     break
 
             if self.large_substituent == True:
@@ -580,6 +581,17 @@ class markmol(object):
             while len(key) > len(self.main_dict[key]):
                 self.main_dict[key] = " " + self.main_dict[key]
 
+        self.attach_ids = {x: 'Te' for x in self.attach_ids}
+        self.Rpositions = list(self.attach_ids.keys())
+
+        for num in self.attach_ids.keys():
+            self.atom_symbols[num] = 'Te'
+
+        i = 0
+        while i < len(self.Rpositions):
+            self.Rpositions[i] = str(self.Rpositions[i])
+            i += 1
+
         return copy.deepcopy(new_content)
 
     def build_blocks(self, new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds):
@@ -648,6 +660,7 @@ class markmol(object):
         # R groups
         zz = zz_convert()
         core_mol = self.core_mol
+        print(f"core_mol: {core_mol}")
         core_inchi = Chem.MolToInchi(core_mol)
         print(f"core_inchi: {core_inchi}")
         order = []
