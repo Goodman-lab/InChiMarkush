@@ -44,6 +44,7 @@ class markmol(object):
         new_content = []
         replace = True
         list_of_atoms = {}
+        self.XHn_groups = []
         for line in content:
             if replace:
                 new_line = line.replace("R#", "Te")
@@ -345,7 +346,7 @@ class markmol(object):
         R = self.Rpositions
         print(f"Rpositions: {R}")
         L = list(self.list_of_atoms.keys())
-        atoms = R + L + list(self.attach_ids.keys()) + attach_list
+        atoms = list(set(R + L + list(self.attach_ids.keys()) + attach_list + self.XHn_groups))
         # all atoms that need labelling now form a set "all_atoms"
         all_atoms = []
         for atom in atoms:
@@ -431,7 +432,15 @@ class markmol(object):
         extraatom_inds = []
         for atom in self.atom_inds:
             i = 0
-            while self.atom_symbols[int(atom) + 2 + i] != 'empty' and int(atom) + 2 + i <= self.no_atomlines:
+            print(self.atom_symbols)
+            print(self.no_atomlines)
+            while int(atom) + 2 + i <= self.no_atomlines and self.atom_symbols[int(atom) + 2 + i] != 'empty':
+                if self.atom_symbols[int(atom) + 1] == 'Te':
+                    to_print = int(atom) + 2 + i
+                    print(to_print)
+                    print("BLA")
+                    i += 1
+                    continue
                 extraatom_inds.append(str(int(atom) + 2 + i))
                 if int(atom) + 2 + i == self.no_atomlines:
                     break
@@ -463,6 +472,8 @@ class markmol(object):
         while m < len(atom_values):
             if atom_values[m] == 'empty':
                 del atom_values[m]
+                print(m)
+                print(atom_values)
                 del atom_values[m+1]
             m += 1
 
@@ -482,6 +493,7 @@ class markmol(object):
         main_numbers = [str(x) for x in old_numbers]
         main_numbers = list(set(main_numbers) - set(self.atom_inds))
         self.subblock = []
+        self.XHn_groups = []
 
         # For each empty atom check to what it is connected
         # Then find all the connections within the attachments
@@ -530,6 +542,11 @@ class markmol(object):
                 bonded_atoms.pop(0)
 
             no_of_atoms = len(group_atoms)
+
+            if no_of_atoms == 1:
+                self.XHn_groups.append(str(int(index) + 1))
+                continue
+
             no_of_bonds = len(save_bonds)
             self.no_atoms -= no_of_atoms - 1
             group_atoms.sort(key=float)
@@ -581,10 +598,18 @@ class markmol(object):
             while len(key) > len(self.main_dict[key]):
                 self.main_dict[key] = " " + self.main_dict[key]
 
-        self.attach_ids = {x: 'Te' for x in self.attach_ids}
-        self.Rpositions = list(self.attach_ids.keys())
+        print(f"XHn_groups: {self.XHn_groups}")
+        attach_ids_keys = [str(x) for x in self.attach_ids.keys()]
 
-        for num in self.attach_ids.keys():
+        for group in self.XHn_groups:
+            if group in attach_ids_keys:
+                attach_ids_keys.pop(attach_ids_keys.index(group))
+
+        self.attach_Te = {int(x): 'Te' for x in attach_ids_keys}
+        self.attach_ids.update(self.attach_Te)
+        self.Rpositions = attach_ids_keys
+
+        for num in self.attach_Te.keys():
             self.atom_symbols[num] = 'Te'
 
         i = 0
