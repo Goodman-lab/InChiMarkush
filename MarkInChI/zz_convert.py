@@ -101,7 +101,7 @@ class zz_convert(object):
         else:
             indexc = formula.find("C")
             indexf = indexc+1
-            for char in formula[indxc+1:]:
+            for char in formula[indexc+1:]:
                 if char.is_alpha():
                     break
                 indexf += 1
@@ -260,7 +260,7 @@ class zz_convert(object):
         else:
             indexc = formula.find("C")
             indexf = indexc+1
-            for char in formula[indxc+1:]:
+            for char in formula[indexc+1:]:
                 if char.is_alpha():
                     break
                 indexf += 1
