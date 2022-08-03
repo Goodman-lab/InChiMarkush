@@ -27,8 +27,8 @@ class markmol(object):
 
         #sys.exit()
 
-        if self.reassignC == True:
-            new_content = self.reassign(new_content)
+        if self.renumber == True and self.large_substituent == False:
+            new_content = self.renumber_main_block(new_content, self.save_atoms_lines)
 
         return copy.deepcopy(new_content)
 
@@ -45,6 +45,7 @@ class markmol(object):
         replace = True
         list_of_atoms = {}
         self.XHn_groups = []
+        self.connections = []
         for line in content:
             if replace:
                 new_line = line.replace("R#", "Te")
@@ -184,12 +185,12 @@ class markmol(object):
         # Atoms need to be reassign if there is more than one placed after each empty atom line
         # (else labels higher than number of atoms)
         emptyatom_iterate = 1
-        self.reassignC = False
+        self.renumber = False
         for index in self.atom_inds:
             if self.no_atomlines-(2*(len(self.atom_inds)-emptyatom_iterate)+1) == int(index):
                 emptyatom_iterate += 1
             else:
-                self.reassignC = True
+                self.renumber = True
                 break
 
         # store the bond between the empty atom and the real attachment atom.
@@ -289,12 +290,18 @@ class markmol(object):
 
         # Check if the variable attachment is larger than one XHn group
         for empty in self.atom_inds:
+            bonds_adjust = list.copy(self.bonds)
+            next_atom = 0
             for bond in self.bonds:
                 if bond.split()[0] == empty:
                     next_atom = bond.split()[1]
+                    bonds_adjust.remove(bond)
+                elif bond.split()[1] == empty:
+                    next_atom = bond.split()[0]
+                    bonds_adjust.remove(bond)
 
-            for bond in self.bonds:
-                if bond.split()[0] == next_atom:
+            for bond in bonds_adjust:
+                if bond.split()[0] == next_atom or bond.split()[1] == next_atom:
                     self.large_substituent = True
                     self.ctabs = [1]
                     break
@@ -423,75 +430,11 @@ class markmol(object):
                     sub_inchi = Chem.MolToSmiles(rwmol)
         return sub_inchi
 
-    def reassign(self, new_content):
-
-        # Assigns lower numbers to atoms that are in the molfile after empty atoms and won't be deleted
-        # Create dictionary of the changes in the old and new numbering
-        # Renumber connectivity in the molfile and atoms in atom_symbols
-
-        extraatom_inds = []
-        for atom in self.atom_inds:
-            i = 0
-            print(self.atom_symbols)
-            print(self.no_atomlines)
-            while int(atom) + 2 + i <= self.no_atomlines and self.atom_symbols[int(atom) + 2 + i] != 'empty':
-                if self.atom_symbols[int(atom) + 1] == 'Te':
-                    to_print = int(atom) + 2 + i
-                    print(to_print)
-                    print("BLA")
-                    i += 1
-                    continue
-                extraatom_inds.append(str(int(atom) + 2 + i))
-                if int(atom) + 2 + i == self.no_atomlines:
-                    break
-                i += 1
-        newextra_inds = list(range(int(self.atom_inds[0]), int(self.atom_inds[0]) + len(extraatom_inds), 1))
-        newextra_inds = [str(x) for x in newextra_inds]
-        # strings = [str(x) for x in ints]
-        self.relabel_dict = dict(zip(extraatom_inds, newextra_inds))
-
-        for key in self.relabel_dict.keys():
-            while len(key) > len(self.relabel_dict[key]):
-                self.relabel_dict[key] = " " + self.relabel_dict[key]
-
-        print(f"relabel_dict: {self.relabel_dict}")
-
-        for l in range(4, len(new_content)):
-            line = new_content[l]
-            if line in self.bonds:
-                for key in self.relabel_dict.keys():
-                    line = line.replace(key, self.relabel_dict[key])
-                new_content[l] = line
-
-        atom_values = []
-        items = self.atom_symbols.items()
-        for item in items:
-            atom_values.append(item[1])
-
-        m = 0
-        while m < len(atom_values):
-            if atom_values[m] == 'empty':
-                del atom_values[m]
-                print(m)
-                print(atom_values)
-                del atom_values[m+1]
-            m += 1
-
-        atom_keys = list(range(1,len(atom_values)+1,1))
-
-        self.atom_symbols = dict(zip(atom_keys, atom_values))
-        print(f"atom_symbols: {self.atom_symbols}")
-
-        return copy.deepcopy(new_content)
-
     def large_var_attach(self, new_content):
         # Transforms variable attachment to R group if the substituent is larger than XHn (XHn = CH3, NH2, OH...)
         bonds = self.bonds
         atom_blocks = []
         total_atoms = self.no_atoms
-        old_numbers = list(range(1, total_atoms + 1, 1))
-        main_numbers = [str(x) for x in old_numbers]
-        main_numbers = list(set(main_numbers) - set(self.atom_inds))
         self.subblock = []
         self.XHn_groups = []
 
@@ -508,6 +451,13 @@ class markmol(object):
                     group_atoms.append(other_atom)
                     save_bonds.append(b)
                     break
+                elif index == b.split()[1]:
+                    other_atom = b.split()[0]
+                    group_atoms.append(other_atom)
+                    save_bonds.append(b)
+                    break
+                else:
+                    other_atom = str(-1)
 
             for s in save_bonds:
                 if s in bonds:
@@ -526,7 +476,7 @@ class markmol(object):
                         if bonded not in group_atoms:
                             group_atoms.append(bonded)
                         new_save_bonds.append(b)
-                    elif b.split()[0] == other_atom:
+                    elif b.split()[1] == other_atom:
                         bonded = b.split()[0]
                         bonded_atoms.append(bonded)
                         if bonded not in group_atoms:
@@ -571,7 +521,6 @@ class markmol(object):
                     b = b.replace(key, str(block_dict[key]))
                 save_bonds[l] = b
 
-            main_numbers = list(set(main_numbers) - set(group_atoms))
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
 
         # Creating the initial line
@@ -588,16 +537,8 @@ class markmol(object):
             if line in new_content:
                 new_content.pop(new_content.index(line))
 
-       # Creating dictionary for main block
-        main_numbers.sort(key=float)
-        main_new = list(range(1, len(main_numbers) + 1, 1))
-        main_new = [str(x) for x in main_new]
-        self.main_dict = dict(zip(main_numbers, main_new))
-
-        for key in self.main_dict.keys():
-            while len(key) > len(self.main_dict[key]):
-                self.main_dict[key] = " " + self.main_dict[key]
-
+        # Adjustments for case of both R and XHn variable attachment, so that it doesn't create a subblock for XHn,
+        # but still treats it as separate variable attachment
         print(f"XHn_groups: {self.XHn_groups}")
         attach_ids_keys = [str(x) for x in self.attach_ids.keys()]
 
@@ -652,38 +593,79 @@ class markmol(object):
             if len(line) == 22:
                 if line not in self.bonds:
                     extra_lines.append(line)
-                else:
-                    l = new_content.index(line)
-                    for key in self.main_dict.keys():
-                        line = line.replace(key, self.main_dict[key])
-                    new_content[l] = line
         for line in extra_lines:
             new_content.remove(line)
 
         end_line = new_content.pop(-1)
+
+        self.renumber_main_block(new_content, self.save_atoms_lines)
+
         new_content = new_content + self.subblock
         new_content.append(end_line)
 
         return copy.deepcopy(new_content)
 
-    def translate(self, dictinary, text):
-        # Replaces all keys in a text with their translation defined by the dictionary
+    def renumber_main_block(self, new_content, main_block_init):
+        # Replaces all keys in the main block
+        # Can help define it with - before first M END  - the rest are subblocks
+        # Also create new atom_symbols dictionary and compare with the ones created when R is used
+
+        # These two are definitely somewhere already - no need to create them again
+
+        main_dict_keys = []
+        main_block_fin = []
+
+        for line in new_content:
+            if len(line) > 68 and 'M' not in line:
+                main_block_fin.append(line)
+
+        for line in main_block_fin:
+            if line in main_block_init:
+                number_init = str(main_block_init.index(line) + 1)
+                main_dict_keys.append(number_init)
+
+        main_dict_values = list(range(1, len(main_dict_keys) + 1, 1))
+        main_dict_values = [str(x) for x in main_dict_values]
+
+        self.main_dict_renumber = dict(zip(main_dict_keys, main_dict_values))
+
+        for key in self.main_dict_renumber.keys():
+            while len(key) > len(self.main_dict_renumber[key]):
+                self.main_dict_renumber[key] = " " + self.main_dict_renumber[key]
+
+        for line in new_content:
+            if len(line) == 22:
+                l = new_content.index(line)
+                for key in self.main_dict_renumber.keys():
+                    line = line.replace(key, self.main_dict_renumber[key])
+                new_content[l] = line
+
+        # Run this if changing self.atom_symbols is needed - is it needed???
+        # atom_values = []
+        # items = self.atom_symbols.items()
+        # for item in items:
+        #     atom_values.append(item[1])
+        #
+        # m = 0
+        # while m < len(atom_values):
+        #     if atom_values[m] == 'empty':
+        #         del atom_values[m]
+        #         del atom_values[m]
+        #     m += 1
+        #
+        # atom_keys = list(range(1, len(atom_values) + 1, 1))
+        #
+        # self.atom_symbols = dict(zip(atom_keys, atom_values))
+        # print(f"atom_symbols: {self.atom_symbols}")
 
 
-        # TODO: ????? check how specific are all the cases and what exactly they need and have in common
-        for l in range(4, len(text)):
-            line = text[l]
-            if line in text:
-                for key in dictinary.keys():
-                    line = line.replace(key, dictinary[key])
-                text[l] = line
-
-        return copy.deepcopy(text)
+        return copy.deepcopy(new_content)
 
     def produce_markinchi(self):
 
         # R groups
         zz = zz_convert()
+        print(self.atom_symbols)
         core_mol = self.core_mol
         print(f"core_mol: {core_mol}")
         core_inchi = Chem.MolToInchi(core_mol)
