@@ -24,8 +24,12 @@ class helper(object):
         for n in line.split("-"):
             # produce an ordered list canonical numbers
             if "(" in n:
-                n_list = n.replace("(", "-").replace(")", "-").split("-")
-                list_of_no += n_list
+                if "," in n:
+                    n_list = n.replace(",", "-").replace("(", "-").replace(")", "-").split("-")
+                    list_of_no += n_list
+                else:
+                    n_list = n.replace("(", "-").replace(")", "-").split("-")
+                    list_of_no += n_list
             else:
                 list_of_no.append(n)
         list_int = set(map(int, list_of_no))  # convert list of numbers to int
