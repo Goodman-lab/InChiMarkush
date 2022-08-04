@@ -303,7 +303,6 @@ class markmol(object):
             for bond in bonds_adjust:
                 if bond.split()[0] == next_atom or bond.split()[1] == next_atom:
                     self.large_substituent = True
-                    self.ctabs = [1]
                     break
 
             if self.large_substituent == True:
@@ -440,6 +439,8 @@ class markmol(object):
 
         # For each empty atom check to what it is connected
         # Then find all the connections within the attachments
+        i = 0
+        self.ctabs = []
         for index in self.atom_inds:
             group_atoms = []
             save_bonds = []
@@ -467,7 +468,11 @@ class markmol(object):
             bonded_atoms = []
 
             # Finding all bonds within the attachment
-            while other_atom in str(bonds):
+            while other_atom in str(bonds) or bonded_atoms != []:
+                if other_atom not in str(bonds):
+                    other_atom = bonded_atoms[0]
+                    bonded_atoms.pop(0)
+                    continue
                 new_save_bonds = []
                 for b in bonds:
                     if b.split()[0] == other_atom:
@@ -520,7 +525,8 @@ class markmol(object):
                 for key in block_dict:
                     b = b.replace(key, str(block_dict[key]))
                 save_bonds[l] = b
-
+            i += 1
+            self.ctabs.append(i)
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
 
         # Creating the initial line
