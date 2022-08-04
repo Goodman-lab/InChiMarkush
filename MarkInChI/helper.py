@@ -23,7 +23,7 @@ class helper(object):
         list_of_no = []
         for n in line.split("-"):
             # produce an ordered list canonical numbers
-            if "(" in n:
+            if "(" or ")" in n:
                 if "," in n:
                     n_list = n.replace(",", "-").replace("(", "-").replace(")", "-").split("-")
                     list_of_no += n_list
