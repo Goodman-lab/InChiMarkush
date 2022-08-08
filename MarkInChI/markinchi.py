@@ -9,6 +9,7 @@ class MarkInChI(object):
 
     def __init__(self, inchi):
 
+        print("************************************")
         zz = zz_convert()
         inchi = inchi.replace("MarkInChI", "InChI", 1)
         # Check it is actually a markinchi
@@ -38,6 +39,7 @@ class MarkInChI(object):
             # Sanitize (only in rdkit)
             new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
             # run alogrithm and then print the resulted list of single inchis
+            print("BLA1")
             self.run_count = 0
             self.run(inchiplus, new_mol)
             print(self.list_of_inchi)
@@ -45,30 +47,47 @@ class MarkInChI(object):
 
     def replacement(self, main_mol, substituent):
 
+        print("BLAA1")
         # This function performs replacements on atoms "-"
         # substituent = rank-atom@replacement or rankH-replacement
         No_H = True  # True if replacement atom is not H
         new_mol = copy.deepcopy(main_mol)
-        id = substituent.split("-")
+        id = substituent.split("-", 1)
         if "H" not in id[0]:
+            print("BLAA2")
             rank, atom, replacement = tuple(id[0]) + tuple(id[1].split("@"))
             replacement = Chem.MolFromSmiles(replacement).GetAtoms()[0]
         else:
+            print("BLAA3")
             rank, replacement = tuple(id)
             # find the atom from the rank
             atom = self.label.find_atom(rank[:-1], self.inchi.split("/")[1])
             if replacement != "H":
+                print("BLAA4")
                 # convert replacement to an Atom() object
-                replacement = Chem.MolFromSmiles(replacement).GetAtoms()[0]
+                # TODO: Make the following statement not raise error - substitute with something else.
+                #  Not a problem for the functionality of the programme, but would be nice to avoid it if possible.
+                self.one_atom = Chem.MolFromSmiles(replacement)
+                if self.one_atom != None:
+                    replacement = Chem.MolFromSmiles(replacement).GetAtoms()[0]
+                else:
+                    print("")
+                    sub_inchi = "InChI=1B/" + replacement  # convert to inchi
+                    sub_mol = Chem.rdinchi.InchiToMol(sub_inchi)[0]
+
             else:
+                print("BLAA5")
                 No_H = False
         is_aromatic = False  # false if atom being replaced is not aromatic
         # get atomic mass for the atom being replaced
         table = Chem.GetPeriodicTable()
         atomic_mass = int(table.GetMostCommonIsotopeMass(atom))
+        print("BLAA6")
         if No_H:
             # normal replacement no H
+            print("BLAA7")
             if "H" not in rank:
+                print("BLAA8")
                 # get isotopic label of atom being replaced
                 num = int(self.ranks[rank])
                 print(f"ranks: {self.ranks}")
@@ -86,9 +105,9 @@ class MarkInChI(object):
                         rwmol.ReplaceAtom(idx, replacement)
                         new_mol = copy.deepcopy(rwmol.GetMol())
             else:
+                print("BLAA9")
                 # get isotopic label of atom being replaced
                 num = int(self.ranks[rank[:-1]])
-                # smiles = Chem.MolToSmiles(new_mol)
                 # smiles.replace("[C]","C")
                 # new_mol = Chem.MolFromSmiles(smiles)
                 rwmol = Chem.RWMol(new_mol)
@@ -102,20 +121,27 @@ class MarkInChI(object):
                         idx = mol_atom.GetIdx()
                         is_aromatic = mol_atom.GetIsAromatic()
                         add_index = rwmol.GetNumAtoms()
-                        new_rwmol.GetAtoms()[idx].SetIsotope(iso_num)
-                        new_rwmol.AddAtom(replacement)
-                        single = Chem.rdchem.BondType.SINGLE
-                        new_rwmol.AddBond(idx, add_index, order=single)
-                        new_mol = copy.deepcopy(new_rwmol.GetMol())
+                        if self.one_atom != None:
+                            new_rwmol.AddAtom(replacement)
+                            new_rwmol.GetAtoms()[idx].SetIsotope(iso_num)
+                            single = Chem.rdchem.BondType.SINGLE
+                            new_rwmol.AddBond(add_index, idx, order=single)
+                            new_mol = copy.deepcopy(new_rwmol.GetMol())
+                        else:
+                            final_mol = self.label.combine(new_rwmol, sub_mol, num)
+                            new_mol = final_mol
         print(f"new_mol: {Chem.MolToSmiles(new_mol)}")
         new_mol = self.label.sanitize_charges(new_mol)
+        print("BLAA10")
         return copy.deepcopy(new_mol)
 
     def replace(self, main_mol, substituent):
         # This function replaces undefined atoms
         # Case not hydrogen
         final_mol = None
+        print("BLABLA1")
         if substituent != "" and substituent != "H":
+            print("BLABLA2")
             sub_inchi = ""
             sub_mol = None
             # We assume that the markinchi will be either:
@@ -123,17 +149,22 @@ class MarkInChI(object):
             # an Atom()
             # 2- more than one atom written in the format of a "part-inchi"
             if substituent.find("/") != -1:
+                print("BLABLA3")
                 # case 2
+                print(substituent)
                 sub_inchi = "InChI=1B/"+substituent  # convert to inchi
                 sub_mol = Chem.rdinchi.InchiToMol(sub_inchi)[0]
+                new = Chem.MolToMolFile(main_mol, "molecule444.sdf", kekulize=False)
                 final_mol = self.label.combine(main_mol, sub_mol)
             else:
+                print("BLABLA4")
                 # case 1: atom
                 # convert it to Mol() rather than Atom() to preserve
                 # its properties
                 sub_mol = Chem.MolFromSmiles(substituent)
                 final_mol = self.label.combine(main_mol, sub_mol)
         else:
+            print("BLABLA5")
             # substituent is hydrogen: just delete "Te" in the core
             final_mol = self.label.delete_zz(main_mol)
         return final_mol
@@ -150,7 +181,9 @@ class MarkInChI(object):
         # molecule will help us understand if we have replacement "-" or
         # variable attachment "," case
         molecule = inchiplus_item.split("!")[0].split("/")[0]
+        print("BLA2")
         if "," in molecule:
+            print("BLA3")
             # Get a clean list of attachments e.g. ["1H", "2H", "4H"...etc]
             # or ["1", "2", "4"...etc]
             attachments = molecule.split(",")
@@ -172,6 +205,7 @@ class MarkInChI(object):
                     inchiplus_item += (sub+"!")
             inchiplus_item = inchiplus_item[:-1]
         else:
+            print("BLA4")
             # only atom replacement case
             if "-" in molecule:
                 # rank = canonical inchi number of atom to be replaced
@@ -194,17 +228,20 @@ class MarkInChI(object):
                 substituent = ""
             new_mol = copy.deepcopy(main_mol)
             new_inchi = ""
-            print(f"subsitutent: {substituent}")
+            print(f"substituent: {substituent}")
             print(f"before substitution: {Chem.MolToSmiles(new_mol)}")
             if "-" in substituent.split("/")[0]:
+                print("BLA5")
                 # replace normal atom "-"
                 new_mol = self.replacement(new_mol, substituent)
                 print(f"after substitution: {Chem.MolToSmiles(new_mol)}")
             else:
+                print("BLA6")
                 # replace Zz atom
                 new_mol = self.replace(new_mol, substituent)
                 print(f"after substitution: {Chem.MolToSmiles(new_mol)}")
             if len(inchiplus) == 0:  # if finished substitutions
+                print("BLA7")
                 # produce inchi
                 new_mol = copy.deepcopy(self.label.sanitize_labels(self.ranks,
                                                                   self.inchi,
@@ -215,6 +252,7 @@ class MarkInChI(object):
                 if new_inchi not in self.list_of_inchi:
                     self.list_of_inchi.append(new_inchi)
             else:
+                print("BLA8")
                 # There is still more substitutions then continue
                 # with current mol and inchiplus
                 new_inchiplus = inchiplus.copy()
