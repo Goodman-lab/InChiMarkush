@@ -1,3 +1,5 @@
+import sys
+
 from rdkit import Chem
 import copy
 import numpy
@@ -180,25 +182,35 @@ class Label(object):
                 new_index = atom.GetIdx()
         return copy.deepcopy(new_mol), post_label
 
-    def combine(self, main_mol, sub_mol):
+    def combine(self, main_mol, sub_mol, num = None):
 
+        print("BAF0")
         # label 30 for sub_mol, and label 35 for main_mol
         sub_label = 0
         if sub_mol.GetNumAtoms() > 1:
+            print("BAF1")
             sub_mol, sub_label = self.get_index(sub_mol, 30)
         else:
+            print("BAF2")
             pre_label = sub_mol.GetAtoms()[0].GetIsotope()
             post_label = 0
             if pre_label == 0:
+                print("BAF3")
                 table = Chem.GetPeriodicTable()
                 atom = sub_mol.GetAtoms()[0].GetSymbol()
                 atomic_mass = int(table.GetMostCommonIsotopeMass(atom))
                 post_label = atomic_mass+30
             else:
                 post_label = pre_label+30
+            print("BAF4")
             sub_mol.GetAtoms()[0].SetIsotope(post_label)
             sub_label = post_label
-        new_mol, main_label = self.get_index(main_mol, 35)
+
+        if num != None:
+            main_label = num
+            new_mol = main_mol
+        else:
+            new_mol, main_label = self.get_index(main_mol, 35)
         combo = Chem.CombineMols(sub_mol, new_mol)
         edcombo = Chem.EditableMol(combo)
         single = Chem.rdchem.BondType.SINGLE
@@ -211,7 +223,10 @@ class Label(object):
                 atom.SetIsotope(sub_label-30)
             if atom.GetIsotope() == main_label:
                 main_index = atom.GetIdx()
-                atom.SetIsotope(main_label-35)
+                if num == None:
+                    atom.SetIsotope(main_label-35)
+                else:
+                    atom.SetIsotope(0)
         edcombo = Chem.EditableMol(back_mol)
         edcombo.AddBond(sub_index, main_index, order=single)
         final_mol = self.sanitize(edcombo.GetMol())
