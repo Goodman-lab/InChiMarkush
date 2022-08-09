@@ -184,25 +184,20 @@ class Label(object):
 
     def combine(self, main_mol, sub_mol, num = None):
 
-        print("BAF0")
         # label 30 for sub_mol, and label 35 for main_mol
         sub_label = 0
         if sub_mol.GetNumAtoms() > 1:
-            print("BAF1")
             sub_mol, sub_label = self.get_index(sub_mol, 30)
         else:
-            print("BAF2")
             pre_label = sub_mol.GetAtoms()[0].GetIsotope()
             post_label = 0
             if pre_label == 0:
-                print("BAF3")
                 table = Chem.GetPeriodicTable()
                 atom = sub_mol.GetAtoms()[0].GetSymbol()
                 atomic_mass = int(table.GetMostCommonIsotopeMass(atom))
                 post_label = atomic_mass+30
             else:
                 post_label = pre_label+30
-            print("BAF4")
             sub_mol.GetAtoms()[0].SetIsotope(post_label)
             sub_label = post_label
 
@@ -261,11 +256,12 @@ class Label(object):
                 i = int(dict[key])
                 atoms += [key]*i
         return atoms[int(rank)-1]
+
     def sanitize(self, mol):
         # there is some issues with RDKIT mol produced from inchi, while the
         # mol produced from SMILES seem to be fine.
         # This also sanitize isotopic labels eg. [ch2] -> c
-        new_mol = copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol)))
+        new_mol = copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol), sanitize = False))
         for atom in new_mol.GetAtoms():
             table = Chem.GetPeriodicTable()
             symbol = atom.GetSymbol()
@@ -293,8 +289,8 @@ class Label(object):
             valence = atom.GetTotalValence()
             default_valence = table.GetDefaultValence(atomic_number)
             electrons = table.GetNOuterElecs(atomic_number)
-            if valence != default_valence:
-                print(f"Warning: atom {atom.GetSymbol} not in default valence")
+            #if valence != default_valence:
+                #print(f"Warning: atom {atom.GetSymbol} not in default valence")
             num = (electrons-valence)
             charge = int((num%2)*numpy.sign(num))
             if atom.GetSymbol() != "C":
