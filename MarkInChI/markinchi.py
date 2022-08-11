@@ -38,6 +38,7 @@ class MarkInChI(object):
             # Sanitize (only in rdkit)
             new_mol = Chem.MolFromSmiles(Chem.MolToSmiles(main_mol))
             # run alogrithm and then print the resulted list of single inchis
+            self.used_substituent = "0H-X"
             self.run_count = 0
             self.run(inchiplus, new_mol)
             print(self.list_of_inchi)
@@ -199,7 +200,12 @@ class MarkInChI(object):
         # split instances of R group separated by "!"
         grouplist=inchiplus_item.split("!")
         print(f"grouplist: {grouplist}")
+        print("HERE")
         for substituent in grouplist:
+            if substituent.split("-")[0] == self.used_substituent.split("-")[0]:
+                print(self.used_substituent)
+                print(substituent)
+                continue
             if substituent == "H":  # make H implicit
                 substituent = ""
             new_mol = copy.deepcopy(main_mol)
@@ -225,6 +231,8 @@ class MarkInChI(object):
                 if new_inchi not in self.list_of_inchi:
                     self.list_of_inchi.append(new_inchi)
             else:
+                print("ROUND")
+                self.used_substituent = copy.copy(substituent)
                 # There is still more substitutions then continue
                 # with current mol and inchiplus
                 new_inchiplus = inchiplus.copy()
