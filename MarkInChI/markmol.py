@@ -20,7 +20,7 @@ class markmol(object):
         new_content = self.var_attach(new_content)
         new_content = self.delete(new_content)
         new_content = self.add(new_content)
-        new_content = self.label(new_content)
+        #new_content = self.label(new_content)
 
         if self.large_substituent == True:
             new_content = self.main_block(new_content)
@@ -29,6 +29,8 @@ class markmol(object):
 
         if self.renumber == True and self.large_substituent == False:
             new_content = self.renumber_main_block(new_content, self.save_atoms_lines)
+
+        new_content = self.label(new_content)
 
         return copy.deepcopy(new_content)
 
@@ -168,7 +170,7 @@ class markmol(object):
                     bond_line = True
             if bond_line:
                 # store bonds
-                if line[0] != "M":
+                if line[0] != "M" and "F" not in line:
                     # bond
                     bonds.append(line)
                 else:
@@ -722,7 +724,7 @@ class markmol(object):
                 mark_inchi += sub_inchi1+"!"
             mark_inchi = mark_inchi[:-1]
         mark_inchi = mark_inchi.replace("InChI=1S/", "MarkInChI=1B/")
-        mark_inchi = mark_inchi.replace("[HH]", "H")
+
         #### list of atoms
         part = ""
         print(f"replace_order: {replace_order}")
@@ -789,6 +791,8 @@ class markmol(object):
                     var_part += symbol
                 # check if it is a normal atom substituent
         mark_inchi += var_part
+        mark_inchi = mark_inchi.replace("[HH]", "H")
+
         return mark_inchi
 
 if __name__=="__main__":
