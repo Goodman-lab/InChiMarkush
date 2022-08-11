@@ -106,7 +106,8 @@ class Label(object):
                             ranks[num] = int(num)+10+atomic_mass
                             new_inchi = self.label(new_inchi, num, str(int(num)+10))
                         else:
-                            raise RuntimeError("Same atom replaced more than once")
+                            #raise RuntimeError("Same atom replaced more than once")
+                            print("Overlap of possible substitutions - check that result is as expected.")
                 else:
                     # only replacements with no variable attachments
                     num = molecule.split("-")[0].split("H")[0]
