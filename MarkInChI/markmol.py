@@ -744,12 +744,16 @@ class markmol(object):
         print(f"mark_inchi: {mark_inchi}")
         var_part = ""
         atom_ids = self.attach_ids
+        total_list = []
+
         for i in range(0, len(list(atom_ids.keys()))):
             mol_rank = list(atom_ids.keys())[i]
             symbol = atom_ids[mol_rank]
             subs = []
             sub_inchis = []
             var_part += "<M>"
+            total = 0
+            attach_points = []
             for mi in self.attachments[i]:
                 print(f"self.attachments: {self.attachments}")
                 other_symbol = self.atom_symbols[int(mi)]
@@ -760,8 +764,45 @@ class markmol(object):
                 else:
                     no = 5
                 new_attach = canonical_dict[str(int(mi)+no)]
+                attach_points.append(new_attach)
+                print(attach_points)
+                total += int(new_attach)
+                print(canonical_dict)
+                print(mi)
+                print(no)
+                print(f"new_attach: {new_attach}")
+                #sub_var_part =
+                var_part += new_attach+"H"+","
+            total_list.append(total)
+            attach_points.sort(key=float)
+            print(f"attach_points: {attach_points}")
+            print(f"total: {total}")
+
+        orig_order = list(range(1, len(list(atom_ids.keys())) + 1, 1))
+        var_order = dict(sorted(zip(total_list, orig_order)))
+        print("HERE")
+        print(var_order)
+
+        for i in list(var_order.values()):
+            mol_rank = list(atom_ids.keys())[i]
+            symbol = atom_ids[mol_rank]
+            subs = []
+            sub_inchis = []
+            var_part += "<M>"
+            for mi in self.attachments[i-1]:
+                print(f"self.attachments: {self.attachments}")
+                other_symbol = self.atom_symbols[int(mi)]
+                print(f"other_symbol: {other_symbol}")
+                no = 0
+                if other_symbol == "Te":
+                    no = 6
+                else:
+                    no = 5
+                new_attach = canonical_dict[str(int(mi)+no)]
+                print(f"new_attach: {new_attach}")
                 var_part += new_attach+"H"+","
             var_part = var_part[:-1]
+            print(var_part)
             var_part += "-"
             if symbol == "Te":
                 ind = self.Rpositions.index(str(mol_rank))
@@ -790,6 +831,7 @@ class markmol(object):
                 else:
                     var_part += symbol
                 # check if it is a normal atom substituent
+
         mark_inchi += var_part
         mark_inchi = mark_inchi.replace("[HH]", "H")
 
