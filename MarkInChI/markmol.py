@@ -284,6 +284,7 @@ class markmol(object):
         print(f"atom_ids: {atom_ids}")
         print(f"atom_symbols: {self.atom_symbols}")
         self.attachments = attachments
+        #self.attachments = [['2','3'],['5','6']]
         self.attach_ids = atom_ids
         self.no_atoms = no_atoms
         self.content = content
@@ -648,32 +649,82 @@ class markmol(object):
                     line = line.replace(key, self.main_dict_renumber[key])
                 new_content[l] = line
 
-        # Run this if changing self.atom_symbols is needed - is it needed???
-        # atom_values = []
-        # items = self.atom_symbols.items()
-        # for item in items:
-        #     atom_values.append(item[1])
-        #
-        # m = 0
-        # while m < len(atom_values):
-        #     if atom_values[m] == 'empty':
-        #         del atom_values[m]
-        #         del atom_values[m]
-        #     m += 1
-        #
-        # atom_keys = list(range(1, len(atom_values) + 1, 1))
-        #
-        # self.atom_symbols = dict(zip(atom_keys, atom_values))
-        # print(f"atom_symbols: {self.atom_symbols}")
-
-
         return copy.deepcopy(new_content)
+
+    def renumber_dict(self):
+        # Run this if changing self.atom_symbols is needed - is it needed???
+        atom_values = []
+        items = self.atom_symbols.items()
+        print(items)
+        for item in items:
+            atom_values.append(item[1])
+        m = 0
+        print(atom_values)
+
+        if "empty" in atom_values:
+            print("YES")
+        atom_values.remove("empty")
+
+        while "empty" in atom_values:
+            atom_values.remove("empty")
+            m += 1
+            if m > 10:
+                sys.exit()
+        print(atom_values)
+        #while "empty" in atom_values:
+        #    if atom_values[m] == "empty":
+        #        del atom_values[m]
+
+        #while m < len(atom_values):
+        #    if atom_values[m] == 'empty':
+        #        del atom_values[m]
+        #        del atom_values[m]
+        #    m += 1
+        atom_keys = list(range(1, len(atom_values) + 1, 1))
+        self.atom_symbols = dict(zip(atom_keys, atom_values))
+        print(f"atom_symbols: {self.atom_symbols}")
+        #sys.exit()
+
+
+        return #copy.deepcopy(new_content)
 
     def produce_markinchi(self):
 
         # R groups
         zz = zz_convert()
+        if 'empty' in self.atom_symbols.values():
+            self.renumber_dict()
+
+        tot_list = []
+        list_sublists = []
+        for sublist in self.attachments:
+            tot_attach = 0
+            for number in sublist:
+                tot_attach += int(number)
+            tot_list.append(tot_attach)
+            list_sublists.append(sublist)
+
+
+        print(list_sublists)
+        print(tot_list)
+
+        new_order = list(range(1, len(tot_list) + 1, 1))
+        attach_dict = dict(sorted(zip(tot_list, new_order)))
+        print(attach_dict)
+
+        new_attach_list = []
+        for subattach in list(attach_dict.values()):
+            new_attach_list.append(self.attachments[subattach-1])
+
+        print(new_attach_list)
+        self.attachments = new_attach_list
+
+        #sys.exit()
+
+
+        print("START")
         print(self.atom_symbols)
+        print(self.attachments)
         core_mol = self.core_mol
         print(f"core_mol: {core_mol}")
         core_inchi = Chem.MolToInchi(core_mol)
@@ -681,33 +732,53 @@ class markmol(object):
         order = []
         replace_order = {}
         index = core_inchi.find("/i")
+        print(index)
         label_part = ""
         if index != -1:
+            print("FLAG1")
             indexf = core_inchi[index+2:].find("/")
             if indexf != -1:
+                print("FLAG2")
                 label_part = core_inchi[index+2:index+2+indexf]
             else:
+                print("FLAG3")
                 label_part = core_inchi[index+2:]
         print(f"label_part: {label_part}")
         canonical_dict = {} # mol_label:inchi_label
+        print("FLAG4")
         for part in label_part.split(","):
             canonical_dict[part.split("+")[1]] = part.split("+")[0]
+            print("CANONICAL DICT")
+            print(canonical_dict)
             rank = part.split("+")[0]
+            print("RANK")
+            print(rank)
             formula = core_inchi.split("/")[1]
+            print(formula)
             symbol = self.help_label.find_atom(rank, formula)
+            print(symbol)
+            print(part)
             if symbol == "Te":
+                print("FLAG5")
                 order.append(str(int(part.split("+")[1])-6))
+                print(order)
             else:
+                print("FLAG6")
                 if str(int(part.split("+")[1])-5) in self.list_of_atoms.keys():
+                    print("FLAG7")
                     replace_order[(str(int(part.split("+")[1])-5))] = str(int(part.split("+")[0]))
         mark_inchi = ""
         if core_inchi.find("Te") != -1:
+            print("FLAG8")
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
             print(f"core_inchi_2: {core_inchi}")
         else:
+            print("FLAG9")
             mark_inchi = self.relabel_core(core_inchi)
             print(f"core_inchi_2: {core_inchi}")
         Rsubstituents = self.Rsubstituents
+        print(Rsubstituents)
+        print(order)
         for num in order:
             ind = self.Rpositions.index(num)
             subs = Rsubstituents[ind]
@@ -716,6 +787,7 @@ class markmol(object):
             for sub in subs:
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
+                    print("FLAG10")
                     sub_inchi = zz.te_to_zz("InChI=1B/"+sub_inchi)
                     sub_inchi = "/".join(sub_inchi.split("/")[1:])
                 sub_inchis.append(sub_inchi)
@@ -745,50 +817,37 @@ class markmol(object):
         var_part = ""
         atom_ids = self.attach_ids
         total_list = []
+        print("FLAG11")
 
         for i in range(0, len(list(atom_ids.keys()))):
             mol_rank = list(atom_ids.keys())[i]
             symbol = atom_ids[mol_rank]
             subs = []
             sub_inchis = []
-            var_part += "<M>"
             total = 0
-            attach_points = []
             for mi in self.attachments[i]:
-                print(f"self.attachments: {self.attachments}")
                 other_symbol = self.atom_symbols[int(mi)]
-                print(f"other_symbol: {other_symbol}")
                 no = 0
                 if other_symbol == "Te":
                     no = 6
                 else:
                     no = 5
                 new_attach = canonical_dict[str(int(mi)+no)]
-                attach_points.append(new_attach)
-                print(attach_points)
                 total += int(new_attach)
-                print(canonical_dict)
-                print(mi)
-                print(no)
                 print(f"new_attach: {new_attach}")
-                #sub_var_part =
-                var_part += new_attach+"H"+","
             total_list.append(total)
-            attach_points.sort(key=float)
-            print(f"attach_points: {attach_points}")
             print(f"total: {total}")
 
         orig_order = list(range(1, len(list(atom_ids.keys())) + 1, 1))
         var_order = dict(sorted(zip(total_list, orig_order)))
-        print("HERE")
-        print(var_order)
 
         for i in list(var_order.values()):
-            mol_rank = list(atom_ids.keys())[i]
+            mol_rank = list(atom_ids.keys())[i-1]
             symbol = atom_ids[mol_rank]
             subs = []
             sub_inchis = []
             var_part += "<M>"
+            attach_points = []
             for mi in self.attachments[i-1]:
                 print(f"self.attachments: {self.attachments}")
                 other_symbol = self.atom_symbols[int(mi)]
@@ -799,10 +858,13 @@ class markmol(object):
                 else:
                     no = 5
                 new_attach = canonical_dict[str(int(mi)+no)]
-                print(f"new_attach: {new_attach}")
-                var_part += new_attach+"H"+","
+                attach_points.append(new_attach)
+            attach_points.sort()
+
+            for attach in attach_points:
+                var_part += attach + "H" + ","
+
             var_part = var_part[:-1]
-            print(var_part)
             var_part += "-"
             if symbol == "Te":
                 ind = self.Rpositions.index(str(mol_rank))
