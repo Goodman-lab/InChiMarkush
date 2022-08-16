@@ -25,8 +25,6 @@ class markmol(object):
         if self.large_substituent == True:
             new_content = self.main_block(new_content)
 
-        #sys.exit()
-
         if self.renumber == True and self.large_substituent == False:
             new_content = self.renumber_main_block(new_content, self.save_atoms_lines)
 
@@ -110,6 +108,8 @@ class markmol(object):
         for line in content:
             # label the 'connection' atom on the substituent with isotopic
             # label 8.
+            if i > len(self.connections):
+                raise Exception("Probably M APO missing at one of the substituents in the molfile - check.")
             if i > 0 and count == int(self.connections[i-1]):
                 # must be mol V2000
                 if atom_line:
@@ -658,35 +658,20 @@ class markmol(object):
         print(items)
         for item in items:
             atom_values.append(item[1])
+
         m = 0
-        print(atom_values)
-
-        if "empty" in atom_values:
-            print("YES")
-        atom_values.remove("empty")
-
         while "empty" in atom_values:
             atom_values.remove("empty")
             m += 1
-            if m > 10:
+            if m > 1000:
                 sys.exit()
         print(atom_values)
-        #while "empty" in atom_values:
-        #    if atom_values[m] == "empty":
-        #        del atom_values[m]
 
-        #while m < len(atom_values):
-        #    if atom_values[m] == 'empty':
-        #        del atom_values[m]
-        #        del atom_values[m]
-        #    m += 1
         atom_keys = list(range(1, len(atom_values) + 1, 1))
         self.atom_symbols = dict(zip(atom_keys, atom_values))
         print(f"atom_symbols: {self.atom_symbols}")
-        #sys.exit()
 
-
-        return #copy.deepcopy(new_content)
+        return
 
     def produce_markinchi(self):
 
@@ -709,17 +694,15 @@ class markmol(object):
         print(tot_list)
 
         new_order = list(range(1, len(tot_list) + 1, 1))
-        attach_dict = dict(sorted(zip(tot_list, new_order)))
-        print(attach_dict)
+        attach_dict = dict(zip(new_order, tot_list))
+        attach_dict = dict(sorted(attach_dict.items(), key=lambda item: item[1]))
 
         new_attach_list = []
-        for subattach in list(attach_dict.values()):
+        for subattach in list(attach_dict.keys()):
             new_attach_list.append(self.attachments[subattach-1])
 
         print(new_attach_list)
         self.attachments = new_attach_list
-
-        #sys.exit()
 
 
         print("START")
@@ -839,9 +822,11 @@ class markmol(object):
             print(f"total: {total}")
 
         orig_order = list(range(1, len(list(atom_ids.keys())) + 1, 1))
-        var_order = dict(sorted(zip(total_list, orig_order)))
+        var_order = dict(zip(orig_order, total_list))
+        var_order = dict(sorted(var_order.items(), key=lambda item: item[1]))
 
-        for i in list(var_order.values()):
+
+        for i in list(var_order.keys()):
             mol_rank = list(atom_ids.keys())[i-1]
             symbol = atom_ids[mol_rank]
             subs = []
