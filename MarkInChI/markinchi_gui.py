@@ -166,6 +166,7 @@ class MarkinchiGuiApp(object):
             mark_obj.attachments = []
             mark_obj.attach_ids = {}
             mark_obj.no_atoms = 0
+            mark_obj.attach_reordered = False
             content = mark_obj.convert(content)
             new_name = name.split(".")[0]+"_RDKIT.sdf"
             new_file = open(new_name, "w")
@@ -187,8 +188,9 @@ class MarkinchiGuiApp(object):
                 if len(ctabs) > 0:
                     mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
             try:
-                print(mark_obj.produce_markinchi())
-                self.entry.insert(0, mark_obj.produce_markinchi())
+                markinchi_final = mark_obj.produce_markinchi()
+                print(markinchi_final)
+                self.entry.insert(0, markinchi_final)
             except IndexError:
                 msg = "Please enter a valid V2000 Markush sdf file"
                 messagebox.showerror("Error", msg)
