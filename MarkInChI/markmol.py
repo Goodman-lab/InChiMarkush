@@ -47,6 +47,7 @@ class markmol(object):
         self.XHn_groups = []
         self.connections = []
         self.subst_order = []
+        self.empty_ind = []
         for line in content:
             if replace:
                 new_line = line.replace("R#", "Te")
@@ -661,21 +662,14 @@ class markmol(object):
         # Run this if changing self.atom_symbols is needed - is it needed???
         atom_values = []
         items = self.atom_symbols.items()
-        print(items)
         for item in items:
-            atom_values.append(item[1])
-
-        m = 0
-        while "empty" in atom_values:
-            atom_values.remove("empty")
-            m += 1
-            if m > 1000:
-                sys.exit()
-        print(atom_values)
+            if item[1] == "empty":
+                self.empty_ind.append(item[0])
+            else:
+                atom_values.append(item[1])
 
         atom_keys = list(range(1, len(atom_values) + 1, 1))
         self.atom_symbols = dict(zip(atom_keys, atom_values))
-        print(f"atom_symbols: {self.atom_symbols}")
 
         return
 
@@ -691,79 +685,73 @@ class markmol(object):
         # Create dictionary that will relate current order of attachments in self.attachments
         # to the correct one saved in self.subst_order
         print("TRUE")
+        print(self.Rpositions)
+        print(self.empty_ind)
         print(self.attachments)
-        if len(self.subst_order) == 1:
+        print(self.atom_symbols)
+        print(self.subst_order)
+        R_coord = []
+        R_attach = []
+        if len(self.subst_order) <= 1 or self.empty_ind == []:
             self.attach_reordered = True
-        self.attach_reordered = True
         if not self.attach_reordered:
-            print(self.subst_order)
-            print(self.attachments)
-            attach_dict = dict(zip(self.subst_order, self.attachments))
-            print(attach_dict)
+            for ind in self.empty_ind:
+                if str(ind + 1) in self.Rpositions:
+                    R_coord.append(self.empty_ind.index(ind))
+            print(R_coord)
+            for coord in R_coord:
+                R_attach.append(self.attachments[coord])
+                in_list = R_coord.index(coord)
+                number = int(self.subst_order[in_list])-1
+                print(number)
+                print(self.attachments[coord])
+                #R_attach[number] = self.attachments[coord]
+                #R_attach[int(self.subst_order[in_list])-1] = self.attachments[coord]
+                print(in_list)
+            attach_dict = dict(zip(self.subst_order, R_attach))
             attach_dict = dict(sorted(attach_dict.items(), key=lambda item: item[0]))
             print(attach_dict)
-            new_attach_list = list(attach_dict.values())
-            self.attachments = new_attach_list
+
+            for num in R_coord:
+                ind = R_coord.index(num)
+                self.attachments[num] = list(attach_dict.values())[ind]
+            print(self.attachments)
             self.attach_reordered = True
 
         print("START")
         print(self.atom_symbols)
         print(self.attachments)
-        #sys.exit()
         core_mol = self.core_mol
-        print(f"core_mol: {core_mol}")
         core_inchi = Chem.MolToInchi(core_mol)
         print(f"core_inchi: {core_inchi}")
         order = []
         replace_order = {}
         index = core_inchi.find("/i")
-        print(index)
         label_part = ""
         if index != -1:
-            print("FLAG1")
             indexf = core_inchi[index+2:].find("/")
             if indexf != -1:
-                print("FLAG2")
                 label_part = core_inchi[index+2:index+2+indexf]
             else:
-                print("FLAG3")
                 label_part = core_inchi[index+2:]
-        print(f"label_part: {label_part}")
         canonical_dict = {} # mol_label:inchi_label
-        print("FLAG4")
+
         for part in label_part.split(","):
             canonical_dict[part.split("+")[1]] = part.split("+")[0]
-            print("CANONICAL DICT")
-            print(canonical_dict)
             rank = part.split("+")[0]
-            print("RANK")
-            print(rank)
             formula = core_inchi.split("/")[1]
-            print(formula)
             symbol = self.help_label.find_atom(rank, formula)
-            print(symbol)
-            print(part)
             if symbol == "Te":
-                print("FLAG5")
                 order.append(str(int(part.split("+")[1])-6))
-                print(order)
             else:
-                print("FLAG6")
                 if str(int(part.split("+")[1])-5) in self.list_of_atoms.keys():
-                    print("FLAG7")
                     replace_order[(str(int(part.split("+")[1])-5))] = str(int(part.split("+")[0]))
         mark_inchi = ""
         if core_inchi.find("Te") != -1:
-            print("FLAG8")
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
-            print(f"core_inchi_2: {core_inchi}")
         else:
-            print("FLAG9")
             mark_inchi = self.relabel_core(core_inchi)
-            print(f"core_inchi_2: {core_inchi}")
         Rsubstituents = self.Rsubstituents
-        print(Rsubstituents)
-        print(order)
         for num in order:
             ind = self.Rpositions.index(num)
             subs = Rsubstituents[ind]
@@ -772,7 +760,6 @@ class markmol(object):
             for sub in subs:
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
-                    print("FLAG10")
                     sub_inchi = zz.te_to_zz("InChI=1B/"+sub_inchi)
                     sub_inchi = "/".join(sub_inchi.split("/")[1:])
                 if sub_inchi == "[HH]":
@@ -788,7 +775,6 @@ class markmol(object):
         part = ""
         print(f"replace_order: {replace_order}")
         for ind in replace_order.keys():
-            print(self.list_of_atoms)
             atom_list = self.list_of_atoms[ind]
             atom_list.sort()
             part += "<M>"
@@ -804,46 +790,24 @@ class markmol(object):
         var_part = ""
         atom_ids = self.attach_ids
         total_list = []
-        print("FLAG11")
-        print(self.attachments)
-        print(atom_ids)
 
         for i in range(0, len(list(atom_ids.keys()))):
-            print("HERE IS I")
-            print(i)
-            print(self.attachments)
-            print(atom_ids)
-            #mol_rank = list(atom_ids.keys())[i]
-            #symbol = atom_ids[mol_rank]
-            #subs = []
-            #sub_inchis = []
             total = 0
             for mi in self.attachments[i]:
                 other_symbol = self.atom_symbols[int(mi)]
-                print("MI")
-                print(mi)
-                print(self.atom_symbols)
-                print(f"other_symbol:{other_symbol}")
                 no = 0
                 if other_symbol == "Te":
                     no = 6
                 else:
                     no = 5
                 new_attach = canonical_dict[str(int(mi)+no)]
-                print(canonical_dict)
-                print(new_attach)
                 total += int(new_attach)
-                print(f"new_attach: {new_attach}")
             total_list.append(total)
-            print(f"total: {total}")
-            print(total_list)
 
         # To sort the substituents from lowest to highest sum of atom attachment numbers
         orig_order = list(range(1, len(list(atom_ids.keys())) + 1, 1))
         var_order = dict(zip(orig_order, total_list))
         var_order = dict(sorted(var_order.items(), key=lambda item: item[1]))
-        print("VAR")
-        print(var_order)
 
         duplicates = []
         for elem in self.attachments:
@@ -856,30 +820,21 @@ class markmol(object):
         all_duplicates = False
         duplicate_parts = []
         j = 0
-        one_total = False
-        current_total = total_list[0]
-        list_var_parts = []
-        print(atom_ids)
-        print("IDS")
-        print(var_order)
-        print(self.attachments)
         k = 1
+        l = 0
+        if var_order != {}:
+            current_total = list(var_order.values())[0]
+        list_var_parts = []
+        previous = False
 
 
         for i in list(var_order.keys()):
-            print("A1")
-            print(var_order.keys())
-            print(total_list)
             if k < len(total_list):
-                future_total = total_list[k]
+                l = list(var_order.keys())[k]
+                future_total = total_list[l-1]
             else:
                 future_total = 0
             one_total = current_total == future_total
-            print(current_total)
-            print(future_total)
-            print(one_total)
-            print(total_list[i-1])
-            print(var_part)
             attachment_list = self.attachments[i-1]
             if attachment_list in duplicates:
                 is_duplicate = True
@@ -890,23 +845,17 @@ class markmol(object):
                 attach_done = True
             else:
                 j = 1
-            print(atom_ids)
             mol_rank = list(atom_ids.keys())[i-1]
-            print(mol_rank)
-            print("MOL")
             symbol = atom_ids[mol_rank]
             subs = []
             sub_inchis = []
-            #num_var = "<M>"
-            #var_part += "<M>"
             attach_points = []
+            sub_list = []
             if attach_done:
                 pass
             else:
                 for mi in self.attachments[i-1]:
-                    print(f"self.attachments: {self.attachments}")
                     other_symbol = self.atom_symbols[int(mi)]
-                    print(f"other_symbol: {other_symbol}")
                     no = 0
                     if other_symbol == "Te":
                         no = 6
@@ -921,18 +870,13 @@ class markmol(object):
                     #var_part += attach + "H" + ","
 
                 num_var = num_var[:-1]
-                #var_part = var_part[:-1]
                 num_var += "-"
-                #var_part += "-"
-                #var_part += num_var
             if symbol == "Te":
                 ind = self.Rpositions.index(str(mol_rank))
                 subs = self.Rsubstituents[ind]
-                print(f"subs: {subs}")
                 sub_inchi = ""
                 for sub in subs:
                     sub_inchi = self.relabel_sub(sub)
-                    print(f"sub_inchi: {sub_inchi}")
                     if sub_inchi.find("Te") != -1:
                         sub_inchi = zz.te_to_zz("InChI=1B/"+sub_inchi)
                         sub_inchi = "/".join(sub_inchi.split("/")[1:])
@@ -946,6 +890,7 @@ class markmol(object):
                     one_part = num_var
                     for sub_inchi1 in sub_inchis:
                         one_part += sub_inchi1 + "!"
+                    one_part = one_part[:-1]
                     list_var_parts.append(one_part)
                 else:
                     var_part += num_var
@@ -953,58 +898,64 @@ class markmol(object):
                         var_part += sub_inchi1 + "!"
                         #var_part += num_var + sub_inchi1+"!"
                 if not is_duplicate:
-                    # TODO: What does this do? Is it even necessary?
                     var_part = var_part[:-1]
             else:
                 # check if it is a list of atoms
-                print("BAF2")
                 if str(mol_rank) in self.list_of_atoms.keys():
                     atoms = self.list_of_atoms[str(mol_rank)]
                     atoms.sort()
-                    print(atoms)
                     for atom in atoms:
-                        #var_part += atom+"!"
                         if is_duplicate:
                             duplicate_parts.append(list(atom))
+                        elif one_total:
+                            one_part = num_var
+                            one_part += atom + "!"
                         else:
                             var_part += num_var + atom + "!"
                     if not is_duplicate:
                         var_part = var_part[:-1]
-                    #var_part = var_part[:-1]
+                    elif one_total:
+                        one_part = one_part[:-1]
+                        list_var_parts.append(one_part)
+
                 else:
-                    #var_part += symbol
                     if is_duplicate:
                         duplicate_parts.append(list(symbol))
+                    elif one_total:
+                        one_part = num_var + symbol
+                        list_var_parts.append(one_part)
                     else:
                         var_part += num_var + symbol
-                # check if it is a normal atom substituent
             previous_attach = attachment_list
             if all_duplicates:
                 for part in duplicate_parts:
                     part.sort()
                 duplicate_parts.sort()
-                #var_part = ""
-                for sub in duplicate_parts:
-                    sub_part = ""
-                    for one in sub:
-                        sub_part += one + "!"
-                    var_part += num_var + sub_part
-                    var_part = var_part[:-1]
-            one_total = False
-            print("ONE")
-            print(list_var_parts)
+                if previous or one_total:
+                    for sub in duplicate_parts:
+                        sub_part = ""
+                        for one in sub:
+                            sub_part += one + "!"
+                        one_part = num_var + sub_part
+                        one_part = one_part[:-1]
+                        list_var_parts.append(one_part)
+                else:
+                    for sub in duplicate_parts:
+                        sub_part = ""
+                        for one in sub:
+                            sub_part += one + "!"
+                        var_part += num_var + sub_part
+                        var_part = var_part[:-1]
             if not one_total and list_var_parts != []:
                 list_var_parts.sort()
-                print(list_var_parts)
                 for var in list_var_parts:
                     var_part += var
                 list_var_parts = []
             is_duplicate = False
             attach_done = False
             all_duplicates = False
-            #one_total = False
+            previous = copy.deepcopy(one_total)
             current_total = copy.deepcopy(future_total)
-            print(list_var_parts)
             k += 1
 
         mark_inchi += var_part
