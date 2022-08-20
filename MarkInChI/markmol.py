@@ -528,8 +528,7 @@ class markmol(object):
             for key in block_dict.keys():
                 while len(key) > len(str(block_dict[key])):
                     block_dict[key] = " " + str(block_dict[key])
-            print(block_dict)
-
+            
             for b in save_bonds:
                 l = save_bonds.index(b)
                 for key in block_dict:
@@ -684,12 +683,6 @@ class markmol(object):
         # Correct attachment of R groups
         # Create dictionary that will relate current order of attachments in self.attachments
         # to the correct one saved in self.subst_order
-        print("TRUE")
-        print(self.Rpositions)
-        print(self.empty_ind)
-        print(self.attachments)
-        print(self.atom_symbols)
-        print(self.subst_order)
         R_coord = []
         R_attach = []
         if len(self.subst_order) <= 1 or self.empty_ind == []:
@@ -698,32 +691,20 @@ class markmol(object):
             for ind in self.empty_ind:
                 if str(ind + 1) in self.Rpositions:
                     R_coord.append(self.empty_ind.index(ind))
-            print(R_coord)
             for coord in R_coord:
                 R_attach.append(self.attachments[coord])
                 in_list = R_coord.index(coord)
                 number = int(self.subst_order[in_list])-1
-                print(number)
-                print(self.attachments[coord])
-                #R_attach[number] = self.attachments[coord]
-                #R_attach[int(self.subst_order[in_list])-1] = self.attachments[coord]
-                print(in_list)
             attach_dict = dict(zip(self.subst_order, R_attach))
             attach_dict = dict(sorted(attach_dict.items(), key=lambda item: item[0]))
-            print(attach_dict)
 
             for num in R_coord:
                 ind = R_coord.index(num)
                 self.attachments[num] = list(attach_dict.values())[ind]
-            print(self.attachments)
             self.attach_reordered = True
 
-        print("START")
-        print(self.atom_symbols)
-        print(self.attachments)
         core_mol = self.core_mol
         core_inchi = Chem.MolToInchi(core_mol)
-        print(f"core_inchi: {core_inchi}")
         order = []
         replace_order = {}
         index = core_inchi.find("/i")
