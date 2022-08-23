@@ -36,10 +36,11 @@ class CompareMarkInChI(object):
                         subgroup = subgroup + 1
 
                     if self.grouplist1_sorted == self.grouplist2_sorted:
-                        print("Equivalent (same core, same substituents)")
+                        print("Equivalent (same core, same substituents) - not canonical")
+                        sys.exit() # Delete if * is active
                     else:
-                        print("Not equivalent (same core, different substituents)")
-                sys.exit()
+                        print("Not equivalent (same core, different substituents) - but possibly only non-canonical")
+                #sys.exit() * activate if canonicality of symmetric molecules is sorted out
         else:
             # Check if the molecular formulas differ if they don't contain Zz
             molformula1 = inchi1.split("/")[1]
