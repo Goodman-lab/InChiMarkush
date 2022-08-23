@@ -200,9 +200,9 @@ class MarkInChI(object):
         # split instances of R group separated by "!"
         grouplist=inchiplus_item.split("!")
         print(f"grouplist: {grouplist}")
-        print("HERE")
         for substituent in grouplist:
             if substituent.split("-")[0] == self.used_substituent.split("-")[0]:
+                print("HERE")
                 print(self.used_substituent)
                 print(substituent)
                 continue
@@ -231,12 +231,12 @@ class MarkInChI(object):
                 if new_inchi not in self.list_of_inchi:
                     self.list_of_inchi.append(new_inchi)
             else:
-                print("ROUND")
                 self.used_substituent = copy.copy(substituent)
                 # There is still more substitutions then continue
                 # with current mol and inchiplus
                 new_inchiplus = inchiplus.copy()
                 self.run(new_inchiplus, new_mol)
+                self.used_substituent = "0H-X"
         return
 
 if __name__=="__main__":
