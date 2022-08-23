@@ -202,7 +202,6 @@ class MarkInChI(object):
         print(f"grouplist: {grouplist}")
         for substituent in grouplist:
             if substituent.split("-")[0] == self.used_substituent.split("-")[0]:
-                print("HERE")
                 print(self.used_substituent)
                 print(substituent)
                 continue
