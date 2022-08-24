@@ -251,13 +251,15 @@ class markmol(object):
                     new_content.append(line)
             else:
                 if line.find("999 V2000") != -1 and allow_change and self.fixed_V2000line:
+
+                    pass
                     # adjust top core mol statement (e.g. no of atoms, etc.)
+                    # TODO: This is essentially doing the same as part in main blocks.
                     atom_line = True
                     no_atoms = int(line.split()[0])-2*no
                     no_bonds = int(line.split()[1])-no
                     atom_part = (3-len(str(no_atoms)))*" "+str(no_atoms)
                     bond_part = (3-len(str(no_bonds)))*" "+str(no_bonds)
-                    print(f"beginning: {3-len(str(no_atoms))}")
                     new_line = atom_part+bond_part+"  "+line[8:]
                     allow_change = False
                     new_content.append(new_line)
@@ -528,7 +530,7 @@ class markmol(object):
             for key in block_dict.keys():
                 while len(key) > len(str(block_dict[key])):
                     block_dict[key] = " " + str(block_dict[key])
-            
+
             for b in save_bonds:
                 l = save_bonds.index(b)
                 for key in block_dict:
@@ -580,11 +582,17 @@ class markmol(object):
         #  Builds subblocks for attachments
         new_subblock = []
         new_subblock.append("\n\n\n\n")
-
-        first_line = new_content[3]
+        init_index = 0
+        for line in new_content:
+            if "V2000" in line:
+                init_index = new_content.index(line)
+                break
+        first_line = new_content[init_index]
+        print("FIRST")
+        print(first_line)
         atom_part = (3 - len(str(no_of_atoms))) * " " + str(no_of_atoms)
         bond_part = (3 - len(str(no_of_bonds))) * " " + str(no_of_bonds)
-        new_line = atom_part + bond_part + "  " + first_line[8:]
+        new_line = atom_part + bond_part + "  0" + first_line[9:]
         new_subblock.append(new_line)
 
         end_line1 = "M  END \n"
@@ -597,6 +605,8 @@ class markmol(object):
         new_subblock.append(end_line1)
         new_subblock.append(end_line2)
 
+        print(new_subblock)
+
         return copy.deepcopy(new_subblock)
 
     def main_block(self, new_content):
@@ -604,7 +614,10 @@ class markmol(object):
         # Translate the bond so that they correspond to the current order of the atoms
 
         extra_lines = []
+        print(new_content)
         for line in new_content:
+            if "M  END" in line:
+                break
             if len(line) == 22:
                 if line not in self.bonds:
                     extra_lines.append(line)
@@ -618,6 +631,47 @@ class markmol(object):
         new_content = new_content + self.subblock
         new_content.append(end_line)
 
+        no_main_atoms = 0
+        no_main_bonds = 0
+        init_line = ""
+        index_init = 0
+        print("MRV")
+        print(new_content[3])
+        delete_lines = []
+        for line in new_content:
+            if "Mrv" in line:
+                new_content.remove(line)
+                break
+        for line in new_content:
+            print(line)
+            if "V2000" in line:
+                init_line = copy.deepcopy(line)
+                index_init = new_content.index(line)
+            if len(line) > 68:
+                no_main_atoms += 1
+            if len(line) == 22:
+                if line.split()[0] == line.split()[1]:
+                    delete_lines.append(line)
+                else:
+                    no_main_bonds +=1
+            if "M  END" in line:
+                break
+        for line in delete_lines:
+            if line in new_content:
+                new_content.remove(line)
+        atom_part = (3 - len(str(no_main_atoms))) * " " + str(no_main_atoms)
+        bond_part = (3 - len(str(no_main_bonds))) * " " + str(no_main_bonds)
+        new_init_line = atom_part + bond_part + "  " + init_line[8:]
+        new_content[index_init] = new_init_line
+        print("HERE")
+        print(no_main_atoms)
+        print(no_main_bonds)
+        print(new_init_line)
+        print(index_init)
+        #new_file = open("newcontent.txt", "w")
+        #new_file.writelines(new_content)
+        #new_file.close()
+
         return copy.deepcopy(new_content)
 
     def renumber_main_block(self, new_content, main_block_init):
@@ -630,14 +684,34 @@ class markmol(object):
         main_dict_keys = []
         main_block_fin = []
 
+        new_file = open("newcontent.txt", "w")
+        new_file.writelines(new_content)
+        new_file.close()
+
         for line in new_content:
             if len(line) > 68 and 'M' not in line:
                 main_block_fin.append(line)
 
+        L_lines = []
+        if " L " in str(main_block_init):
+            print("L is here")
+            for line in main_block_init:
+                if line[31] == "L":
+                    L_lines.append(line.split()[0])
+                    L_lines.append(line.split()[1])
+        print(L_lines)
         for line in main_block_fin:
             if line in main_block_init:
                 number_init = str(main_block_init.index(line) + 1)
                 main_dict_keys.append(number_init)
+                continue
+            if line.split()[0] in L_lines:
+                line_symbol = line[31:35]
+                line = line.replace(line_symbol, "L   ")
+                print(line)
+                number_init = str(main_block_init.index(line) + 1)
+                main_dict_keys.append(number_init)
+
 
         main_dict_values = list(range(1, len(main_dict_keys) + 1, 1))
         main_dict_values = [str(x) for x in main_dict_values]
