@@ -77,6 +77,7 @@ class markmol(object):
                 self.connections.append(connection)
             new_content.append(new_line)
         self.list_of_atoms = list_of_atoms
+        self.ctabs.append(ctab)
         return copy.deepcopy(new_content)
 
     def delete(self, content):
@@ -387,31 +388,27 @@ class markmol(object):
         # new_all_atoms contains all atoms other than the empty and real atoms
         print(f"no_atoms: {self.no_atoms}")
         # TODO: This (all_atoms) needs to be relabeled before M ISO is created
-        delete_atom = []
-        for at in all_atoms:
-            if str(at) in list(self.main_dict_renumber.keys()):
-                new_at = int(self.main_dict_renumber[str(at)])
-                all_atoms[i] = new_at
-            elif str(at) not in list(self.main_dict_renumber.keys()) and at > self.no_atoms:
-                delete_atom.append(at)
-            #all_atoms = list(map(lambda x: x.replace(at, new_at), all_atoms))
-            #if int(at) > self.no_atoms:
-            #    new_all_atoms = all_atoms[:i]
-            #    print(new_all_atoms)
-            #    break
-            i += 1
-        #for new_atom in new_all_atoms:
-        #    new_atom = int(self.main_dict_renumber[str(new_atom)])
-        # all_atoms = new_all_atoms???
-        print(list(self.main_dict_renumber.keys()))
-        print(all_atoms)
-        all_atoms = list(set(all_atoms) - set(delete_atom))
+        if self.main_dict_renumber != {}:
+            delete_atom = []
+            for at in all_atoms:
+                if str(at) in list(self.main_dict_renumber.keys()):
+                    new_at = int(self.main_dict_renumber[str(at)])
+                    all_atoms[i] = new_at
+                elif str(at) not in list(self.main_dict_renumber.keys()) and at > self.no_atoms:
+                    delete_atom.append(at)
+                i += 1
+            print(list(self.main_dict_renumber.keys()))
+            print(all_atoms)
+            all_atoms = list(set(all_atoms) - set(delete_atom))
         print(f"all_atoms: {all_atoms}")
+        # Something here is not working
+        #new_atom_symbols = copy.deepcopy(self.renumber_dict())
+        new_atom_symbols = self.atom_symbols
         n = len(all_atoms)
         p = str(n)
         print("HERE WE ARE")
-        new_atom_symbols = copy.deepcopy(self.renumber_dict())
-        print(new_atom_symbols)
+        #new_atom_symbols = copy.deepcopy(self.renumber_dict())
+        #print(new_atom_symbols)
         iso_line = f"M  ISO"
         iso_line += (3-len(p))*" "+p
         for p in all_atoms:
@@ -483,6 +480,7 @@ class markmol(object):
         print("CCTABS")
         print(self.ctabs)
         #self.ctabs = []
+        #self.ctabs.append()
         for index in self.atom_inds:
             group_atoms = []
             save_bonds = []
@@ -567,8 +565,11 @@ class markmol(object):
                     b = b.replace(key, str(block_dict[key]))
                 save_bonds[l] = b
             i += 1
-            self.ctabs.append(i)
+            self.ctabs.append(1 + self.ctabs[-1])
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
+
+        print(self.ctabs)
+        print("LAST CTAB")
 
         # Creating the initial line
         self.bonds = bonds
@@ -797,39 +798,6 @@ class markmol(object):
             self.atom_symbols = self.renumber_dict()
             #self.renumber_dict()
 
-        # Correct attachment of R groups
-        # Create dictionary that will relate current order of attachments in self.attachments
-        # to the correct one saved in self.subst_order
-        R_coord = []
-        R_attach = []
-        print("EMPTY")
-        print(self.subst_order)
-        print(self.empty_ind)
-        print(self.Rpositions)
-        print(self.attachments)
-        if len(self.subst_order) <= 1 or self.empty_ind == []:
-            self.attach_reordered = True
-        self.attach_reordered = True
-        if not self.attach_reordered:
-            for ind in self.empty_ind:
-                if str(ind + 1) in self.Rpositions:
-                    R_coord.append(self.empty_ind.index(ind))
-            for coord in R_coord:
-                R_attach.append(self.attachments[coord])
-                #in_list = R_coord.index(coord)
-                #number = int(self.subst_order[in_list])-1
-            attach_dict = dict(zip(self.subst_order, R_attach))
-            attach_dict = dict(sorted(attach_dict.items(), key=lambda item: item[0]))
-            print(R_coord)
-            print(self.attachments)
-            print(attach_dict)
-            for num in R_coord:
-                print(num)
-                ind = R_coord.index(num)
-                print(ind)
-                self.attachments[num] = list(attach_dict.values())[ind]
-            self.attach_reordered = True
-
         print("MARKINCHI - START")
         #sys.exit()
 
@@ -883,10 +851,25 @@ class markmol(object):
         print(Rsubstituents)
         print("START")
         print(order)
+        new_Rpositions = copy.deepcopy(self.Rpositions)
+        #l = list(map(lambda x: x.replace('Pant', 'Ishan'), l))
+        # This probably creates too much mess by wanting to partially translate a list
+        #new_Rpositions = list(map(self.main_dict_renumber.get, new_Rpositions))
+        print(new_Rpositions)
+        #for position in new_Rpositions:
+        #    if position in list(self.main_dict_renumber.keys()):
+        #        pass
         #order = ['25']
         for num in order:
             print("FLAG1")
-            ind = self.Rpositions.index(num)
+            if num not in list(self.main_dict_renumber.values()):
+                continue
+            else:
+                #mydict.keys()[mydict.values().index(16)]
+                num_old = list(self.main_dict_renumber.keys())[list(self.main_dict_renumber.values()).index(num)]
+            #num_old = self.main_dict_renumber
+            print(num_old)
+            ind = self.Rpositions.index(num_old)
             print(ind)
             subs = Rsubstituents[ind]
             sub_inchis = []
@@ -956,16 +939,13 @@ class markmol(object):
         previous_attach = []
         is_duplicate = False
         attach_done = False
-        all_duplicates = False
         duplicate_parts = []
-        j = 0
         k = 1
-        l = 0
+
         if var_order != {}:
             current_total = list(var_order.values())[0]
         list_var_parts = []
         previous = False
-
 
         for i in list(var_order.keys()):
             if k < len(total_list):
@@ -977,25 +957,17 @@ class markmol(object):
             attachment_list = self.attachments[i-1]
             if attachment_list in duplicates:
                 is_duplicate = True
-                j += 1
-                if j == self.attachments.count(attachment_list) and j > 1:
-                    all_duplicates = True
             if attachment_list == previous_attach:
                 attach_done = True
-            else:
-                j = 1
             mol_rank = list(atom_ids.keys())[i-1]
             symbol = atom_ids[mol_rank]
-            subs = []
             sub_inchis = []
             attach_points = []
-            sub_list = []
             if attach_done:
                 pass
             else:
                 for mi in self.attachments[i-1]:
                     other_symbol = self.atom_symbols[int(mi)]
-                    no = 0
                     if other_symbol == "Te":
                         no = 6
                     else:
@@ -1011,10 +983,8 @@ class markmol(object):
                 num_var = num_var[:-1]
                 num_var += "-"
             if symbol == "Te":
-                print(self.Rpositions)
                 ind = self.Rpositions.index(str(mol_rank))
                 subs = self.Rsubstituents[ind]
-                sub_inchi = ""
                 for sub in subs:
                     sub_inchi = self.relabel_sub(sub)
                     if sub_inchi.find("Te") != -1:
@@ -1057,7 +1027,6 @@ class markmol(object):
                     elif one_total:
                         one_part = one_part[:-1]
                         list_var_parts.append(one_part)
-
                 else:
                     if is_duplicate:
                         duplicate_parts.append(list(symbol))
@@ -1067,7 +1036,7 @@ class markmol(object):
                     else:
                         var_part += num_var + symbol
             previous_attach = attachment_list
-            if all_duplicates:
+            if self.attachments.count(attachment_list) == len(duplicate_parts):
                 for part in duplicate_parts:
                     part.sort()
                 duplicate_parts.sort()
@@ -1086,6 +1055,7 @@ class markmol(object):
                             sub_part += one + "!"
                         var_part += num_var + sub_part
                         var_part = var_part[:-1]
+
             if not one_total and list_var_parts != []:
                 list_var_parts.sort()
                 for var in list_var_parts:
@@ -1093,13 +1063,12 @@ class markmol(object):
                 list_var_parts = []
             is_duplicate = False
             attach_done = False
-            all_duplicates = False
             previous = copy.deepcopy(one_total)
             current_total = copy.deepcopy(future_total)
             k += 1
 
         mark_inchi += var_part
-        mark_inchi = mark_inchi.replace("[HH]", "H")
+        #mark_inchi = mark_inchi.replace("[HH]", "H")
 
         return mark_inchi
 
@@ -1120,6 +1089,7 @@ if __name__=="__main__":
     mark_obj.attach_ids = {}
     mark_obj.no_atoms = 0
     mark_obj.attach_reordered = False
+    mark_obj.main_dict_renumber = {}
     content = mark_obj.convert(content)
     new_name = name.split(".")[0]+"_RDKIT.sdf"
     new_file = open(new_name, "w")
@@ -1133,9 +1103,15 @@ if __name__=="__main__":
     mark_obj.core_mol = copy.deepcopy(supply[0])
     i = 1
     ctabs = mark_obj.ctabs
-    while i < len(ctabs):
+    while i < len(ctabs) - 1:
         mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
         i += 1
     mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
+    divide_subst = len(mark_obj.subst_order)
+    R_subst = mark_obj.Rsubstituents[:divide_subst]
+    other_subst = mark_obj.Rsubstituents[divide_subst:]
+    subst_dict = dict(zip(mark_obj.subst_order, R_subst))
+    subst_dict = dict(sorted(subst_dict.items(), key=lambda item: item[0]))
+    mark_obj.Rsubstituents = list(subst_dict.values()) + other_subst
     print(mark_obj.produce_markinchi())
     file.close()
