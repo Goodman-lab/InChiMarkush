@@ -14,20 +14,18 @@ class markmol(object):
 
         # This function converts a normal markush SDF file to RDKIT compatible
         # SDF file. Input: list. Output: list.
-        self.fixed_V2000line = True
         self.large_substituent = False
         new_content = self.replaceR(content)
         new_content = self.var_attach(new_content)
         new_content = self.delete(new_content)
         new_content = self.add(new_content)
-        #new_content = self.label(new_content)
 
         if self.large_substituent == True:
             new_content = self.main_block(new_content)
 
         if self.renumber == True and self.large_substituent == False:
             new_content = self.renumber_main_block(new_content, self.save_atoms_lines)
-        print("LABEL")
+
         new_content = self.label(new_content)
 
         return copy.deepcopy(new_content)
@@ -251,19 +249,17 @@ class markmol(object):
                     atom_line = False
                     new_content.append(line)
             else:
-                if line.find("999 V2000") != -1 and allow_change and self.fixed_V2000line:
-
-                    pass
-                    # adjust top core mol statement (e.g. no of atoms, etc.)
-                    # TODO: This is essentially doing the same as part in main blocks.
+                if line.find("999 V2000") != -1 and allow_change:
+                    # Adjust top core mol statement (e.g. no of atoms, etc.)
+                    # Needs to be created even if var_attach transforms it later (it works with the already created line)
                     atom_line = True
                     no_atoms = int(line.split()[0])-2*no
                     no_bonds = int(line.split()[1])-no
-                    atom_part = (3-len(str(no_atoms)))*" "+str(no_atoms)
-                    bond_part = (3-len(str(no_bonds)))*" "+str(no_bonds)
+                    atom_part = (3 - len(str(no_atoms)))*" "+str(no_atoms)
+                    bond_part = (3 - len(str(no_bonds)))*" "+str(no_bonds)
                     new_line = atom_part+bond_part+"  "+line[8:]
-                    allow_change = False
                     new_content.append(new_line)
+                    allow_change = False
                 else:
                     if not atom_line and not allow_change:
                         if len(line) == 22:
@@ -365,13 +361,8 @@ class markmol(object):
         R = self.Rpositions
         print(f"Rpositions: {R}")
         L = list(self.list_of_atoms.keys())
-        print(L)
-        print(self.attach_ids)
-        print(attach_list)
-        print(self.XHn_groups)
         atoms = list(set(R + L + list(self.attach_ids.keys()) + attach_list + self.XHn_groups))
         # all atoms that need labelling now form a set "all_atoms"
-        print(atoms)
         all_atoms = []
         for atom in atoms:
             if int(atom) not in all_atoms:
@@ -381,13 +372,9 @@ class markmol(object):
         print(f"all_atoms: {all_atoms}")
         i = 0
         new_all_atoms = copy.deepcopy(all_atoms)
-        print(new_all_atoms)
-        print(self.main_dict_renumber)
-        #for new_atom in new_all_atoms:
-        #    new_atom = int(self.main_dict_renumber[str(new_atom)])
         # new_all_atoms contains all atoms other than the empty and real atoms
         print(f"no_atoms: {self.no_atoms}")
-        # TODO: This (all_atoms) needs to be relabeled before M ISO is created
+
         if self.main_dict_renumber != {}:
             delete_atom = []
             for at in all_atoms:
@@ -397,18 +384,20 @@ class markmol(object):
                 elif str(at) not in list(self.main_dict_renumber.keys()) and at > self.no_atoms:
                     delete_atom.append(at)
                 i += 1
-            print(list(self.main_dict_renumber.keys()))
-            print(all_atoms)
             all_atoms = list(set(all_atoms) - set(delete_atom))
+            new_atom_symbols = copy.deepcopy(self.renumber_dict())
+        else:
+            for at in all_atoms:
+                if int(at) > self.no_atoms:
+                    new_all_atoms = all_atoms[:i]
+                    break
+                i += 1
+            all_atoms = copy.deepcopy(new_all_atoms)
+            new_atom_symbols = self.atom_symbols
+
         print(f"all_atoms: {all_atoms}")
-        # Something here is not working
-        #new_atom_symbols = copy.deepcopy(self.renumber_dict())
-        new_atom_symbols = self.atom_symbols
         n = len(all_atoms)
         p = str(n)
-        print("HERE WE ARE")
-        #new_atom_symbols = copy.deepcopy(self.renumber_dict())
-        #print(new_atom_symbols)
         iso_line = f"M  ISO"
         iso_line += (3-len(p))*" "+p
         for p in all_atoms:
@@ -419,8 +408,6 @@ class markmol(object):
             label = str(atomic_mass + 5 + p)
             iso_line += (4-len(str(p)))*" "+str(p)+(4-len(label))*" "+label
         iso_line += "\n"
-        print(iso_line)
-        #sys.exit()
         new_content = []
         replace = True
         for line in content:
@@ -470,17 +457,12 @@ class markmol(object):
         # Transforms variable attachment to R group if the substituent is larger than XHn (XHn = CH3, NH2, OH...)
         bonds = self.bonds
         atom_blocks = []
-        total_atoms = self.no_atoms
         self.subblock = []
         self.XHn_groups = []
 
         # For each empty atom check to what it is connected
         # Then find all the connections within the attachments
         i = 0
-        print("CCTABS")
-        print(self.ctabs)
-        #self.ctabs = []
-        #self.ctabs.append()
         for index in self.atom_inds:
             group_atoms = []
             save_bonds = []
@@ -568,19 +550,6 @@ class markmol(object):
             self.ctabs.append(1 + self.ctabs[-1])
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
 
-        print(self.ctabs)
-        print("LAST CTAB")
-
-        # Creating the initial line
-        self.bonds = bonds
-        no_bonds = len(self.bonds)
-        first_line = new_content[3]
-        atom_part = (3 - len(str(self.no_atoms))) * " " + str(self.no_atoms)
-        bond_part = (3 - len(str(no_bonds))) * " " + str(no_bonds)
-        new_line = atom_part + bond_part + "  " + first_line[8:]
-        new_content[3] = new_line
-        self.fixed_V2000line = False
-        # TODO
 
         for line in atom_blocks:
             if line in new_content:
@@ -597,14 +566,11 @@ class markmol(object):
 
         self.attach_Te = {int(x): 'Te' for x in attach_ids_keys}
         self.attach_ids.update(self.attach_Te)
-        # TODO:
-        print("RPOS")
-        print(self.Rpositions)
+
         if self.Rpositions == []:
             self.Rpositions = attach_ids_keys
         else:
             self.Rpositions = self.Rpositions + attach_ids_keys
-        print(self.Rpositions)
 
         for num in self.attach_Te.keys():
             self.atom_symbols[num] = 'Te'
@@ -627,8 +593,8 @@ class markmol(object):
                 init_index = new_content.index(line)
                 break
         first_line = new_content[init_index]
-        print("FIRST")
-        print(first_line)
+
+        # Creating the V2000 line for the subblocks
         atom_part = (3 - len(str(no_of_atoms))) * " " + str(no_of_atoms)
         bond_part = (3 - len(str(no_of_bonds))) * " " + str(no_of_bonds)
         new_line = atom_part + bond_part + "  0" + first_line[9:]
@@ -644,7 +610,6 @@ class markmol(object):
         new_subblock.append(end_line1)
         new_subblock.append(end_line2)
 
-        print(new_subblock)
 
         return copy.deepcopy(new_subblock)
 
@@ -653,7 +618,6 @@ class markmol(object):
         # Translate the bond so that they correspond to the current order of the atoms
 
         extra_lines = []
-        print(new_content)
         for line in new_content:
             if "M  END" in line:
                 break
@@ -674,15 +638,12 @@ class markmol(object):
         no_main_bonds = 0
         init_line = ""
         index_init = 0
-        print("MRV")
-        print(new_content[3])
         delete_lines = []
         for line in new_content:
             if "Mrv" in line:
                 new_content.remove(line)
                 break
         for line in new_content:
-            print(line)
             if "V2000" in line:
                 init_line = copy.deepcopy(line)
                 index_init = new_content.index(line)
@@ -698,18 +659,12 @@ class markmol(object):
         for line in delete_lines:
             if line in new_content:
                 new_content.remove(line)
+
+        # Creating the initial line if variable attachment present in the molecule
         atom_part = (3 - len(str(no_main_atoms))) * " " + str(no_main_atoms)
         bond_part = (3 - len(str(no_main_bonds))) * " " + str(no_main_bonds)
         new_init_line = atom_part + bond_part + "  " + init_line[8:]
         new_content[index_init] = new_init_line
-        print("HERE")
-        print(no_main_atoms)
-        print(no_main_bonds)
-        print(new_init_line)
-        print(index_init)
-        #new_file = open("newcontent.txt", "w")
-        #new_file.writelines(new_content)
-        #new_file.close()
 
         return copy.deepcopy(new_content)
 
@@ -733,12 +688,10 @@ class markmol(object):
 
         L_lines = []
         if " L " in str(main_block_init):
-            print("L is here")
             for line in main_block_init:
                 if line[31] == "L":
                     L_lines.append(line.split()[0])
                     L_lines.append(line.split()[1])
-        print(L_lines)
         for line in main_block_fin:
             if line in main_block_init:
                 number_init = str(main_block_init.index(line) + 1)
@@ -747,7 +700,6 @@ class markmol(object):
             if line.split()[0] in L_lines:
                 line_symbol = line[31:35]
                 line = line.replace(line_symbol, "L   ")
-                print(line)
                 number_init = str(main_block_init.index(line) + 1)
                 main_dict_keys.append(number_init)
 
@@ -767,20 +719,17 @@ class markmol(object):
                 for key in self.main_dict_renumber.keys():
                     line = line.replace(key, self.main_dict_renumber[key])
                 new_content[l] = line
-        print("RENUMBERED")
+
         return copy.deepcopy(new_content)
 
     def renumber_dict(self):
         # Run this if changing self.atom_symbols is needed - is it needed???
         atom_values = []
         items = self.atom_symbols.items()
-        print("ITEMS")
-        print(items)
-        print(self.empty_ind)
+
         for item in items:
             if item[1] == "empty" and item[0] not in self.empty_ind:
                 self.empty_ind.append(item[0])
-                print(self.empty_ind)
             elif item[1] != "empty":
                 atom_values.append(item[1])
 
@@ -796,10 +745,6 @@ class markmol(object):
         zz = zz_convert()
         if 'empty' in self.atom_symbols.values():
             self.atom_symbols = self.renumber_dict()
-            #self.renumber_dict()
-
-        print("MARKINCHI - START")
-        #sys.exit()
 
         core_mol = self.core_mol
         core_inchi = Chem.MolToInchi(core_mol)
@@ -807,75 +752,42 @@ class markmol(object):
         replace_order = {}
         index = core_inchi.find("/i")
         label_part = ""
-        print("START")
-        print(core_inchi)
-        new_mol = Chem.MolFromInchi(core_inchi)
-        new = Chem.MolToMolFile(new_mol, "molecule000.sdf", kekulize=False)
+
         if index != -1:
-            print("F1")
             indexf = core_inchi[index+2:].find("/")
             if indexf != -1:
-                print("F2")
                 label_part = core_inchi[index+2:index+2+indexf]
             else:
-                print("F3")
                 label_part = core_inchi[index+2:]
         canonical_dict = {} # mol_label:inchi_label
-        print(label_part)
-        #sys.exit()
+
         for part in label_part.split(","):
-            print("F5")
             canonical_dict[part.split("+")[1]] = part.split("+")[0]
             rank = part.split("+")[0]
             formula = core_inchi.split("/")[1]
-            print(formula)
             symbol = self.help_label.find_atom(rank, formula)
-            print(symbol)
+
             if symbol == "Te":
-                print("F6")
                 order.append(str(int(part.split("+")[1])-6))
             else:
-                print("F7")
-                print(self.list_of_atoms)
                 if str(int(part.split("+")[1])-5) in self.list_of_atoms.keys():
-                    print("F8")
                     replace_order[(str(int(part.split("+")[1])-5))] = str(int(part.split("+")[0]))
-        print(order)
-        mark_inchi = ""
         if core_inchi.find("Te") != -1:
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
         else:
             mark_inchi = self.relabel_core(core_inchi)
         Rsubstituents = self.Rsubstituents
-        print(self.Rpositions)
-        print(Rsubstituents)
-        print("START")
-        print(order)
-        new_Rpositions = copy.deepcopy(self.Rpositions)
-        #l = list(map(lambda x: x.replace('Pant', 'Ishan'), l))
-        # This probably creates too much mess by wanting to partially translate a list
-        #new_Rpositions = list(map(self.main_dict_renumber.get, new_Rpositions))
-        print(new_Rpositions)
-        #for position in new_Rpositions:
-        #    if position in list(self.main_dict_renumber.keys()):
-        #        pass
-        #order = ['25']
+
         for num in order:
-            print("FLAG1")
             if num not in list(self.main_dict_renumber.values()):
                 continue
             else:
-                #mydict.keys()[mydict.values().index(16)]
                 num_old = list(self.main_dict_renumber.keys())[list(self.main_dict_renumber.values()).index(num)]
-            #num_old = self.main_dict_renumber
-            print(num_old)
             ind = self.Rpositions.index(num_old)
-            print(ind)
             subs = Rsubstituents[ind]
             sub_inchis = []
             mark_inchi += "<M>"
             for sub in subs:
-                print("FLAG2")
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
                     sub_inchi = zz.te_to_zz("InChI=1B/"+sub_inchi)
@@ -884,14 +796,10 @@ class markmol(object):
                     sub_inchi = "H"
                 sub_inchis.append(sub_inchi)
             sub_inchis.sort()
-            print(sub_inchis)
             for sub_inchi1 in sub_inchis:
-                print("FLAG3")
                 mark_inchi += sub_inchi1+"!"
             mark_inchi = mark_inchi[:-1]
         mark_inchi = mark_inchi.replace("InChI=1S/", "MarkInChI=1B/")
-        print(mark_inchi)
-        #sys.exit()
         #### list of atoms
         part = ""
         print(f"replace_order: {replace_order}")
@@ -1068,7 +976,6 @@ class markmol(object):
             k += 1
 
         mark_inchi += var_part
-        #mark_inchi = mark_inchi.replace("[HH]", "H")
 
         return mark_inchi
 
