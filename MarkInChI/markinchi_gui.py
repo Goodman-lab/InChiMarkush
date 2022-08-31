@@ -175,22 +175,16 @@ class MarkinchiGuiApp(object):
             new_file.close()
             supply = Chem.SDMolSupplier(new_name)
             substituents = []
-            print("SUPPLY")
-            #print(supply)
             for mol in supply:
                 if mol is not None:
-                    #substituents.append(Chem.MolToInchi(mol))
                     substituents.append(mol)
-            #print(substituents)
             mark_obj.core_mol = copy.deepcopy(supply[0])
             i = 1
             ctabs = mark_obj.ctabs
             print(f"ctabs: {ctabs}")
             while i < len(ctabs) - 1:
-                #print(i)
                 mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
                 i += 1
-                #print(mark_obj.Rsubstituents)
             else:
                 if len(ctabs) > 0:
                     mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
@@ -200,9 +194,6 @@ class MarkinchiGuiApp(object):
             subst_dict = dict(zip(mark_obj.subst_order, R_subst))
             subst_dict = dict(sorted(subst_dict.items(), key=lambda item: item[0]))
             mark_obj.Rsubstituents = list(subst_dict.values()) + other_subst
-            #print(mark_obj.Rsubstituents)
-            #print("now")
-            #sys.exit()
 
             try:
                 markinchi_final = mark_obj.produce_markinchi()
