@@ -187,16 +187,10 @@ class markmol(object):
             if line.find("999 V2000") != -1:
                 atom_line = True
 
-        # Atoms need to be reassign if there is more than one placed after each empty atom line
-        # (else labels higher than number of atoms)
-        emptyatom_iterate = 1
+        # Atoms will be reassigned if there are any 'empty' atoms
         self.renumber = False
-        for index in self.atom_inds:
-            if self.no_atomlines-(2*(len(self.atom_inds)-emptyatom_iterate)+1) == int(index):
-                emptyatom_iterate += 1
-            else:
-                self.renumber = True
-                break
+        if 'empty' in self.atom_symbols.values():
+            self.renumber = True
 
         # store the bond between the empty atom and the real attachment atom.
         for b in bonds:
@@ -375,7 +369,7 @@ class markmol(object):
         # new_all_atoms contains all atoms other than the empty and real atoms
         print(f"no_atoms: {self.no_atoms}")
 
-        if self.main_dict_renumber != {}:
+        if self.main_dict_renumber != {} or self.main_dict_renumber.values() != self.main_dict_renumber.keys():
             delete_atom = []
             for at in all_atoms:
                 if str(at) in list(self.main_dict_renumber.keys()):
@@ -738,6 +732,30 @@ class markmol(object):
 
         return new_atom_symbols
 
+    def sort_var_attach(self, is_duplicate, one_total, num_var, duplicate_parts, list_var_parts, var_part, substituents):
+
+        if is_duplicate:
+            # If the attachments are not unique and need to be sorted alphabetically with others first,
+            # they are saved in a list of all these duplicates
+            duplicate_parts.append(substituents)
+        elif one_total:
+            # If same sum of attachments as other substituent,
+            # creating the string for this substituent and saving it
+            # into a list of these with the same total to be sorted before creating MarkInChI
+            one_part = num_var
+            for sub in substituents:
+                one_part += sub + "!"
+            one_part = one_part[:-1]
+            list_var_parts.append(one_part)
+        else:
+            # If no need to sort because is unique and has unique total, directly add to the var_part
+            var_part += num_var
+            for sub in substituents:
+                var_part += sub + "!"
+            var_part = var_part[:-1]
+
+        return duplicate_parts, list_var_parts, var_part
+
     def produce_markinchi_Rgroups(self, core_inchi, zz):
 
         order = []
@@ -772,9 +790,11 @@ class markmol(object):
 
         for num in order:
             if num not in list(self.main_dict_renumber.values()):
+                # When there is no variable attachment
                 continue
             else:
                 num_old = list(self.main_dict_renumber.keys())[list(self.main_dict_renumber.values()).index(num)]
+            #
             ind = self.Rpositions.index(num_old)
             subs = Rsubstituents[ind]
             sub_inchis = []
@@ -931,55 +951,20 @@ class markmol(object):
 
                 # Sorting the sub_inchis alphabetically to ensure canonicality
                 sub_inchis.sort()
-                if is_duplicate:
-                    # If the attachments are not unique and need to be sorted alphabetically with others first,
-                    # they are saved in a list of all these duplicates
-                    duplicate_parts.append(list(sub_inchis))
-                elif one_total:
-                    # TODO: can this and if is_duplicate both be true?
-                    # If same sum of attachments as other substituent,
-                    # creating the string for this substituent and saving it
-                    # into a list of these with the same total to be sorted before creating MarkInChI
-                    one_part = num_var
-                    for sub_inchi1 in sub_inchis:
-                        one_part += sub_inchi1 + "!"
-                    one_part = one_part[:-1]
-                    list_var_parts.append(one_part)
-                else:
-                    # If no need to sort because is unique and has unique total, directly add to the var_part
-                    var_part += num_var
-                    for sub_inchi1 in sub_inchis:
-                        var_part += sub_inchi1 + "!"
-                        # var_part += num_var + sub_inchi1+"!"
-                if not is_duplicate:
-                    # TODO: make sure it doesn't delete anything that needs to stay (like removing a part several times)
-                    #  - could it be right after the var_part is created in else: previously?
-                    # Removes "!" (?) so another part can continue
-                    var_part = var_part[:-1]
+                # Sorting sub_inchis for variable attachments
+                duplicate_parts, list_var_parts, var_part = self.sort_var_attach(is_duplicate, one_total, num_var,
+                                                                duplicate_parts, list_var_parts, var_part, sub_inchis)
             else:
                 # Check if it is a list of atoms
                 if str(mol_rank) in self.list_of_atoms.keys():
                     # Get the atoms and sort them alphabetically
                     atoms = self.list_of_atoms[str(mol_rank)]
                     atoms.sort()
-                    # TODO: create function that does that generally so can be used for all cases
-                    for atom in atoms:
-                        if is_duplicate:
-                            # If not unique attachment points, add to the duplicate list
-                            duplicate_parts.append(list(atom))
-                        elif one_total:
-                            # If not unique sum of attachment points, create the part
-                            one_part = num_var
-                            one_part += atom + "!"
-                        else:
-                            # TODO: will it not add the num_var there too many times???
-                            var_part += num_var + atom + "!"
-                    if not is_duplicate:
-                        var_part = var_part[:-1]
-                    elif one_total:
-                        one_part = one_part[:-1]
-                        list_var_parts.append(one_part)
+                    # Sorting atoms for variable attachments
+                    duplicate_parts, list_var_parts, var_part = self.sort_var_attach(is_duplicate, one_total, num_var,
+                                                                    duplicate_parts, list_var_parts, var_part, atoms)
                 else:
+                    # If just a single XHn as variable attachment
                     if is_duplicate:
                         duplicate_parts.append(list(symbol))
                     elif one_total:
@@ -987,6 +972,7 @@ class markmol(object):
                         list_var_parts.append(one_part)
                     else:
                         var_part += num_var + symbol
+
             previous_attach = attachment_list
             if self.attachments.count(attachment_list) == len(duplicate_parts):
                 for part in duplicate_parts:
