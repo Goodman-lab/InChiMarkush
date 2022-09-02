@@ -52,7 +52,10 @@ class MarkInChI(object):
         new_mol = copy.deepcopy(main_mol)
         id = substituent.split("-", 1)
         if "H" not in id[0]:
-            rank, atom, replacement = tuple(id[0]) + tuple(id[1].split("@"))
+            rank = id[0]
+            atom, replacement = tuple(id[1].split("@"))
+            # Code below cannot be used because it splits numbers into digits for id[0]
+            # rank, atom, replacement = tuple(id[0]) + tuple(id[1].split("@"))
             replacement = Chem.MolFromSmiles(replacement).GetAtoms()[0]
         else:
             rank, replacement = tuple(id)
