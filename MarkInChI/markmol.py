@@ -10,6 +10,55 @@ class markmol(object):
     """ This class is used for the conversion of a markush mol to a markush
         inchi."""
 
+    def __init__(self, name):
+
+        file = open(name, "r")
+        content = file.readlines()
+        self.help_label = Label()
+        self.atom_symbols = {}
+        self.Rpositions = []  # number of each Te atom
+        self.Rsubstituents = []
+        self.ctabs = []  # no. of each substituent after $RGP
+        self.connections = []
+        self.list_of_atoms = {}
+        self.attachments = []
+        self.no_atoms = 0
+        self.attach_reordered = False
+        self.main_dict_renumber = {}
+        self.XHn_groups = []
+        self.connections = []
+        self.subst_order = []
+        self.empty_ind = []
+        content = self.convert(content)
+        new_name = name.split(".")[0] + "_RDKIT.sdf"
+        new_file = open(new_name, "w")
+        new_file.writelines(content)
+        new_file.close()
+        supply = Chem.SDMolSupplier(new_name)
+        substituents = []
+        for mol in supply:
+            if mol is not None:
+                substituents.append(mol)
+        self.core_mol = copy.deepcopy(supply[0])
+        i = 1
+        ctabs = self.ctabs
+        while i < len(ctabs) - 1:
+            self.Rsubstituents.append(substituents[int(ctabs[i - 1]):int(ctabs[i])])
+            i += 1
+        self.Rsubstituents.append(substituents[int(ctabs[i - 1]):])
+        divide_subst = len(self.subst_order)
+        R_subst = self.Rsubstituents[:divide_subst]
+        other_subst = self.Rsubstituents[divide_subst:]
+        subst_dict = dict(zip(self.subst_order, R_subst))
+        subst_dict = dict(sorted(subst_dict.items(), key=lambda item: item[0]))
+        self.Rsubstituents = list(subst_dict.values()) + other_subst
+        print(self.produce_markinchi())
+        file.close()
+
+
+
+
+
     def convert(self, content):
 
         # This function converts a normal markush SDF file to RDKIT compatible
@@ -42,10 +91,6 @@ class markmol(object):
         new_content = []
         replace = True
         list_of_atoms = {}
-        self.XHn_groups = []
-        self.connections = []
-        self.subst_order = []
-        self.empty_ind = []
         for line in content:
             if replace:
                 new_line = line.replace("R#", "Te")
@@ -452,7 +497,6 @@ class markmol(object):
         bonds = self.bonds
         atom_blocks = []
         self.subblock = []
-        self.XHn_groups = []
 
         # For each empty atom check to what it is connected
         # Then find all the connections within the attachments
@@ -717,16 +761,20 @@ class markmol(object):
         return copy.deepcopy(new_content)
 
     def renumber_dict(self):
-        # Run this if changing self.atom_symbols is needed - is it needed???
+
+        #### Changing self.atom_symbols - removing empty atoms
+
         atom_values = []
         items = self.atom_symbols.items()
 
+        # Creates list of all empty atoms (self.empty_ind) and of non-empty atoms (atom_values)
         for item in items:
             if item[1] == "empty" and item[0] not in self.empty_ind:
                 self.empty_ind.append(item[0])
             elif item[1] != "empty":
                 atom_values.append(item[1])
 
+        # Creating new dictionary with non-empty atoms only
         atom_keys = list(range(1, len(atom_values) + 1, 1))
         new_atom_symbols = dict(zip(atom_keys, atom_values))
 
@@ -758,48 +806,64 @@ class markmol(object):
 
     def produce_markinchi_Rgroups(self, core_inchi, zz):
 
-        order = []
-        replace_order = {}
-        index = core_inchi.find("/i")
-        label_part = ""
+        #### Produces part of MarkInChI associated with R groups (attached to one atom, not variable attachments)
 
+        # Initializing variables
+        order = [] # Atoms where Te/Zz indicates R group is attached on the main skeleton
+        replace_order = {} # All the lists of atoms
+        index = core_inchi.find("/i") # If index part in core_inchi
+        label_part = "" # Encoding atoms to which something is attached
+        canonical_dict = {} # Dictionary of mol_label : inchi_label (taken from label_part "value"+"key")
+
+        # Taking the label part (that indicates atoms to which something is attached) from core_inchi
         if index != -1:
             indexf = core_inchi[index + 2:].find("/")
             if indexf != -1:
                 label_part = core_inchi[index + 2:index + 2 + indexf]
             else:
                 label_part = core_inchi[index + 2:]
-        canonical_dict = {}  # mol_label:inchi_label
 
+        # Finding inchi labels of atoms with attachments from label_part
         for part in label_part.split(","):
             canonical_dict[part.split("+")[1]] = part.split("+")[0]
             rank = part.split("+")[0]
             formula = core_inchi.split("/")[1]
+            # Finding symbol of atom given by the rank from the molecular formula
             symbol = self.help_label.find_atom(rank, formula)
 
             if symbol == "Te":
+                # Creating list of atoms with R group attachments (not variable attachments)
                 order.append(str(int(part.split("+")[1]) - 6))
             else:
+                # Creating lists of lists of atoms
                 if str(int(part.split("+")[1]) - 5) in self.list_of_atoms.keys():
                     replace_order[(str(int(part.split("+")[1]) - 5))] = str(int(part.split("+")[0]))
+
+        # Start creating MarkInChI by relabeling Te into Zz in core_inchi
         if core_inchi.find("Te") != -1:
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
         else:
             mark_inchi = self.relabel_core(core_inchi)
+
         Rsubstituents = self.Rsubstituents
 
+        # Creating parts of MarkInChI for R groups attached
         for num in order:
             if num not in list(self.main_dict_renumber.values()):
-                # When there is no variable attachment
+                # When there is no variable attachment in the molecule
                 continue
             else:
+                # TODO: Perhaps renumber self.Rpositions?
+                # Getting old index of the atom since it's associated with this in self.Rpositions
                 num_old = list(self.main_dict_renumber.keys())[list(self.main_dict_renumber.values()).index(num)]
-            #
+
             ind = self.Rpositions.index(num_old)
             subs = Rsubstituents[ind]
             sub_inchis = []
             mark_inchi += "<M>"
+
             for sub in subs:
+                # Creates InChI for each R substituents
                 sub_inchi = self.relabel_sub(sub)
                 if sub_inchi.find("Te") != -1:
                     sub_inchi = zz.te_to_zz("InChI=1B/" + sub_inchi)
@@ -808,17 +872,23 @@ class markmol(object):
                     sub_inchi = "H"
                 sub_inchis.append(sub_inchi)
             sub_inchis.sort()
-            for sub_inchi1 in sub_inchis:
-                mark_inchi += sub_inchi1 + "!"
+
+            # Adding all the InChIs into the MarkInChI
+            for one_sub_inchi in sub_inchis:
+                mark_inchi += one_sub_inchi + "!"
+
             mark_inchi = mark_inchi[:-1]
+
         mark_inchi = mark_inchi.replace("InChI=1S/", "MarkInChI=1B/")
 
         return copy.deepcopy(mark_inchi), canonical_dict, replace_order
 
     def produce_markinchi_list_of_atoms(self, replace_order, mark_inchi):
 
+        #### Produces part of MarkInChI associated with lists of atoms (excluding those in variable attachments)
+
         part = ""
-        print(f"replace_order: {replace_order}")
+        # For each replaced atoms creates sub part of MarkInChI and adds it to it
         for ind in replace_order.keys():
             atom_list = self.list_of_atoms[ind]
             atom_list.sort()
@@ -828,26 +898,26 @@ class markmol(object):
             for atom in atom_list:
                 part += atom + "!"
             part = part[:-1]
-        print(f"list of atoms part: {part}")
         mark_inchi += part
 
         return copy.deepcopy(mark_inchi)
 
     def produce_markinchi_var_attach(self, canonical_dict, zz):
 
-        #### variable attachments
+        #### Produces part of MarkInChI associated with variable attachments
+
         num_var = ""
         var_part = ""
         atom_ids = self.attach_ids
-        total_list = [] # list of sums of attachment indices
+        total_list = [] # List of sums of attachment indices
 
         # Finding the indices of the atoms to which it is attached and adding them together
         # to create ranking of the substituents (from lowest total to highest) - for canonicality
         for i in range(0, len(list(atom_ids.keys()))):
             total = 0
             for mi in self.attachments[i]:
+                # TODO: If we renumber self.atom_symbols and translate everything?
                 other_symbol = self.atom_symbols[int(mi)]
-                no = 0
                 if other_symbol == "Te":
                     no = 6
                 else:
@@ -869,17 +939,17 @@ class markmol(object):
                 if elem not in duplicates:
                     duplicates.append(elem)
 
-        previous_attach = []
-        is_duplicate = False
-        attach_done = False
-        duplicate_parts = []
-        k = 1
+        # Initializing variables used inside of the for loop
+        is_duplicate = False # Turns True whenever more substituents have the same attachment points
+        attach_done = False # Turns True if the "attachment" part of the string (e.g., 1H,2H-) has been already created
+        previous_attach = [] # Will contain attachment_list of the previous variable attachment
+        duplicate_parts = [] # Will contain all variable attachments with the same attachment_list
+        list_var_parts = [] # Will contain all variable parts of attachments with the same total so they can be ordered
+        k = 1 # Indexing for loop so some values are easier to call
 
         # Finding total of the first substituent (to sort substituents alphabetically if their total is the same)
         if var_order != {}:
             current_total = list(var_order.values())[0]
-        list_var_parts = []
-        previous = False
 
         # For each attachment - create appropriate part of MarkInChI
         for i in list(var_order.keys()):
@@ -973,35 +1043,36 @@ class markmol(object):
                     else:
                         var_part += num_var + symbol
 
-            previous_attach = attachment_list
+            # If all the substituents with the same attachment points are already in duplicate parts
             if self.attachments.count(attachment_list) == len(duplicate_parts):
+                # Sorted alphabetically
                 for part in duplicate_parts:
                     part.sort()
                 duplicate_parts.sort()
-                if previous or one_total:
-                    for sub in duplicate_parts:
-                        sub_part = ""
-                        for one in sub:
-                            sub_part += one + "!"
-                        one_part = num_var + sub_part
-                        one_part = one_part[:-1]
-                        list_var_parts.append(one_part)
-                else:
-                    for sub in duplicate_parts:
-                        sub_part = ""
-                        for one in sub:
-                            sub_part += one + "!"
-                        var_part += num_var + sub_part
-                        var_part = var_part[:-1]
 
+                # Create parts of MarkInChI for each variable attachment
+                for sub in duplicate_parts:
+                    sub_part = ""
+                    # Create sub part of MarkInChI with substituents within each variable attachment
+                    for one in sub:
+                        sub_part += one + "!"
+                    one_part = num_var + sub_part
+                    one_part = one_part[:-1]
+                    list_var_parts.append(one_part)
+
+            # If all substituents with the same total have been already created a part of MarkInChI
             if not one_total and list_var_parts != []:
                 list_var_parts.sort()
+                # MarkInChI part added to the var_part
                 for var in list_var_parts:
                     var_part += var
+                # Reset list_var_parts
                 list_var_parts = []
+
+            # Reset/ Update variables
             is_duplicate = False
             attach_done = False
-            previous = copy.deepcopy(one_total)
+            previous_attach = copy.deepcopy(attachment_list)
             current_total = copy.deepcopy(future_total)
             k += 1
 
@@ -1027,48 +1098,12 @@ class markmol(object):
 
         mark_inchi += var_part
 
+        # Final MarkInChI made a global variable so it can be called from outside of the class
+        self.markinchi_final = copy.deepcopy(mark_inchi)
+
         return mark_inchi
 
 if __name__=="__main__":
+    # Running the code independently
     name = input("Enter the file name with the extension:")
-    file = open(name, "r")
-    content = file.readlines()
-    mark_obj = markmol()
-    zz = zz_convert()
-    mark_obj.help_label = Label()
-    mark_obj.atom_symbols = {}
-    mark_obj.Rpositions = []  # number of each Te atom
-    mark_obj.Rsubstituents = []
-    mark_obj.ctabs = []  # no. of each substituent after $RGP
-    mark_obj.connections = []
-    mark_obj.list_of_atoms = {}
-    mark_obj.attachments = []
-    mark_obj.attach_ids = {}
-    mark_obj.no_atoms = 0
-    mark_obj.attach_reordered = False
-    mark_obj.main_dict_renumber = {}
-    content = mark_obj.convert(content)
-    new_name = name.split(".")[0]+"_RDKIT.sdf"
-    new_file = open(new_name, "w")
-    new_file.writelines(content)
-    new_file.close()
-    supply = Chem.SDMolSupplier(new_name)
-    substituents = []
-    for mol in supply:
-        if mol is not None:
-            substituents.append(mol)
-    mark_obj.core_mol = copy.deepcopy(supply[0])
-    i = 1
-    ctabs = mark_obj.ctabs
-    while i < len(ctabs) - 1:
-        mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
-        i += 1
-    mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
-    divide_subst = len(mark_obj.subst_order)
-    R_subst = mark_obj.Rsubstituents[:divide_subst]
-    other_subst = mark_obj.Rsubstituents[divide_subst:]
-    subst_dict = dict(zip(mark_obj.subst_order, R_subst))
-    subst_dict = dict(sorted(subst_dict.items(), key=lambda item: item[0]))
-    mark_obj.Rsubstituents = list(subst_dict.values()) + other_subst
-    print(mark_obj.produce_markinchi())
-    file.close()
+    mark_inchi_final = markmol(name)
