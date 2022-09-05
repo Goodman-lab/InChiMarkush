@@ -493,50 +493,71 @@ class markmol(object):
         return sub_inchi
 
     def large_var_attach(self, new_content):
-        # Transforms variable attachment to R group if the substituent is larger than XHn (XHn = CH3, NH2, OH...)
-        bonds = self.bonds
-        atom_blocks = []
-        self.subblock = []
 
-        # For each empty atom check to what it is connected
+        #### Transforms variable attachments to R groups if a substituent is larger than XHn (XHn = CH3, NH2, OH...)
+
+        bonds = self.bonds #
+        atom_blocks = [] # Will contain all atom lines associated with the substituents (to delete them from main block)
+        self.subblock = [] # Will contain all new subblocks created for large_var_attach
+
+        # For each empty atom check to what it is connected (self.atom_inds contains all the empty atoms)
         # Then find all the connections within the attachments
-        i = 0
         for index in self.atom_inds:
-            group_atoms = []
-            save_bonds = []
+            group_atoms = [] # Will contain all the atoms in the substituent
+            # TODO: Rename save_bonds here, it's confusing that it has the same name in both parts of the loop
+            save_bonds = [] # Will contain all the bonds to empty atoms, so they can be later deleted
 
-            # Finding bonds to empty atoms
+            # Finding atoms bonded to empty atoms (and the bonds as well) and adding them to group_atoms
             for b in bonds:
+                # If the index of the empty atom is in the bond line, it finds the atom to which it is connected
+                # Usually the lower index atoms are first in the bond line, but not always true - must check both
                 if index == b.split()[0]:
                     other_atom = b.split()[1]
                     group_atoms.append(other_atom)
                     save_bonds.append(b)
-                    break
+                    break # Since only one connection to empty atom, no need to continue with the loop
                 elif index == b.split()[1]:
                     other_atom = b.split()[0]
                     group_atoms.append(other_atom)
                     save_bonds.append(b)
                     break
                 else:
+                    # If something goes wrong, check the value of other_atom
                     other_atom = str(-1)
 
+            # Delete all bonds to empty atoms from the list of all the bonds
             for s in save_bonds:
                 if s in bonds:
                     bonds.pop(bonds.index(s))
 
-            save_bonds = []
-            bonded_atoms = []
+            save_bonds = [] # Will contain all the bonds within the substituent
+            bonded_atoms = [] #
 
             # Finding all bonds within the attachment
+            # "other_atom in str(bonds)" - if not all connections to a particular atom from the substituent
+            # have not been saved and removed from the list of all the bonds
+            # "bonded_atoms != []" - if we have not tried searching the connections to all atoms
+            # that we know are in the substituent (usually is true and the other isn't at the end of longer branches)
+            # Both of these conditions need to be met to be sure that we have gathered all atoms from the substituent
             while other_atom in str(bonds) or bonded_atoms != []:
-                if other_atom not in str(bonds):
+
+                if other_atom not in str(bonds): # Easy way to check whether it is in any of the bonds
+                    # If there are no connections to the atom, remove it from bonded_atoms
+                    # and choose different one from bonded_atoms
+                    # And then skip the rest of the commands in this loop cycle
                     other_atom = bonded_atoms[0]
                     bonded_atoms.pop(0)
                     continue
-                new_save_bonds = []
+
+                new_save_bonds = [] # Will contain all the new bonds from this other_atom
+
                 for b in bonds:
+                    # Find all atoms to which it is connected by searching the bonds and them all to bonded_atoms
+                    # If the new atoms are not in group_atoms yet, add them there (can be in several bonds)
+                    # Add these bonds to new_save_bonds
                     if b.split()[0] == other_atom:
                         bonded = b.split()[1]
+                        # TODO: Shouldn't be in the if statement as well? If already in group_atoms, was already handled.
                         bonded_atoms.append(bonded)
                         if bonded not in group_atoms:
                             group_atoms.append(bonded)
@@ -548,84 +569,113 @@ class markmol(object):
                             group_atoms.append(bonded)
                         new_save_bonds.append(b)
 
+                # Remove all the bonds connected to other_atom from the list of all bonds
+                # (at the end no bonds related to large_var_attach should stay in the main block)
                 for s in new_save_bonds:
                     if s in bonds:
                         bonds.pop(bonds.index(s))
 
-                save_bonds = save_bonds + new_save_bonds
-                other_atom = bonded_atoms[0]
-                bonded_atoms.pop(0)
+                save_bonds += new_save_bonds # Add the new bonds to all bonds in the substituent
+                other_atom = bonded_atoms[0] # Pick new atom to run the loop with
+                bonded_atoms.pop(0) # Remove this atom from bonded_atoms
 
-            no_of_atoms = len(group_atoms)
+            no_of_atoms = len(group_atoms) # Get the number of atoms within the substituent
 
-            if no_of_atoms == 1:
+            if no_of_atoms == 1: # If only one atom - it is a XHn group, skip the rest of the cycle
                 self.XHn_groups.append(str(int(index) + 1))
                 continue
 
-            no_of_bonds = len(save_bonds)
+            no_of_bonds = len(save_bonds) # Get the number of bonds within the substituent
+
+            # Deduct the number of atoms in the substituent -1 from the total number of atoms in the main block
+            # (-1 since two were already deducted for each empty atom, so not to do it twice
+            # - also the reason why we don't have to deduct them for XHn groups anymore)
             self.no_atoms -= no_of_atoms - 1
+
+            # TODO: Check by not drawing the connection atom first if it works (due to 8 labelling) - here we are assuming the connection atom will always have the lowest label.
+            #  But perhaps not sorting them would help? Then the connection atom would be always first because it is connected to the empty atom.
             group_atoms.sort(key=float)
 
             # Putting together the coordinate line block of the attachment
+            # - add atom lines associated with each atom to atom_subblock
             atom_subblock = []
             for atom in group_atoms:
                 atom_subblock.append(self.save_atoms_lines[int(atom)-1])
+
             atom_blocks += atom_subblock
 
+            # Create dictionary relating old and new atom numbers
+            # TODO: Here no reverse? Probably not? - But still check.
             new_numbers = list(range(1, len(group_atoms) + 1, 1))
             block_dict = dict(zip(group_atoms, new_numbers))
 
+            # To keep the number of characters that will be replaced equal (if different numbers of digits)
             for key in block_dict.keys():
                 while len(key) > len(str(block_dict[key])):
                     block_dict[key] = " " + str(block_dict[key])
 
+            # Replace the old numbers in the bonds by new
             for b in save_bonds:
                 l = save_bonds.index(b)
                 for key in block_dict:
-                    b = b.replace(key, str(block_dict[key]))
-                save_bonds[l] = b
-            i += 1
-            self.ctabs.append(1 + self.ctabs[-1])
+                    b = b.replace(key, str(block_dict[key])) # Replace them in the line
+                save_bonds[l] = b # Update the line in the list
+
+            self.ctabs.append(1 + self.ctabs[-1]) # Since only one substituent each, append number by 1 larger to ctabs
+            # Add a new subblock related to this subsittuent to the whole block of subblocks
+            # This new subblock will be built from collected data in this function
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
 
-
+        # Delete all the substituent lines from the main block
         for line in atom_blocks:
             if line in new_content:
                 new_content.pop(new_content.index(line))
 
-        # Adjustments for case of both R and XHn variable attachment, so that it doesn't create a subblock for XHn,
-        # but still treats it as separate variable attachment
+        # Adjustments for case of both R and XHn variable attachment, (it doesn't create a subblock for XHn),
+        # but still needs to be treated as separate variable attachment
         print(f"XHn_groups: {self.XHn_groups}")
         attach_ids_keys = [str(x) for x in self.attach_ids.keys()]
 
+        # Removes XHn groups from attach_ids_keys
         for group in self.XHn_groups:
             if group in attach_ids_keys:
                 attach_ids_keys.pop(attach_ids_keys.index(group))
 
+        # Creates dictionary of Te connections for large_var_attach (not XHn groups)
+        # and updates self.attach_ids (replacing the atom by Te - the atom is separately in the substituent)
         self.attach_Te = {int(x): 'Te' for x in attach_ids_keys}
         self.attach_ids.update(self.attach_Te)
 
+        # Adds Rpositions for large_var_attach to the already existing ones
         if self.Rpositions == []:
             self.Rpositions = attach_ids_keys
         else:
-            self.Rpositions = self.Rpositions + attach_ids_keys
+            self.Rpositions += attach_ids_keys
 
+        # Updates the atom symbols by replacing connecting atoms of large_var_attach by Te
         for num in self.attach_Te.keys():
             self.atom_symbols[num] = 'Te'
 
-        i = 0
-        while i < len(self.Rpositions):
-            self.Rpositions[i] = str(self.Rpositions[i])
-            i += 1
+        # Making sure all are strings
+        # TODO: Check that this is really necessary - maybe they are all already strings?
+        #  (At least the large_var_attach part is.
+        self.Rpositions = [str(x) for x in self.Rpositions]
 
         return copy.deepcopy(new_content)
 
     def build_blocks(self, new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds):
 
-        #  Builds subblocks for attachments
-        new_subblock = []
+        ####  Build subblocks for attachments
+
+        # atom_subblock - all the atom lines associated with the attachment
+        # save_bonds - all the bond lines associated with the attachment
+        # no_of_atoms, no_of_bonds - total number of atoms and bonds in this subblock
+        new_subblock = [] # List containing all the elements needed to create a new subblock
+        init_index = 0  # Will be index of the initial line
+
         new_subblock.append("\n\n\n\n")
-        init_index = 0
+
+        # Finding index of the V2000 line (initial line) and then finding this line in new_content
         for line in new_content:
             if "V2000" in line:
                 init_index = new_content.index(line)
@@ -638,67 +688,96 @@ class markmol(object):
         new_line = atom_part + bond_part + "  0" + first_line[9:]
         new_subblock.append(new_line)
 
+        # Creating lines indicating end of the subblock
         end_line1 = "M  END \n"
         end_line2 = "$$$$"
 
+        # Taking the first atom line of the subblock and placing "8" instead of the first 0,
+        # to indicate by which atom it is connected
+        # (will be always the first one for these newly created subblocks because of the way they are created)
         sub_attach = atom_subblock.pop(0)
         attach_line = sub_attach[:35] + "8" + sub_attach[36:]
+
+        # Attaching all the lines in the appropriate order
+        # (V2000, first atom line, rest of atom subblock, bond subblock, end lines)
         new_subblock.append(attach_line)
         new_subblock = new_subblock + atom_subblock + save_bonds
         new_subblock.append(end_line1)
         new_subblock.append(end_line2)
 
-
         return copy.deepcopy(new_subblock)
 
     def main_block(self, new_content):
-        # Adjust the main block of the molecule just before the file is used
-        # Translate the bond so that they correspond to the current order of the atoms
+        #### Adjust the main block of the molecule just before the file is used
+        # (deleting problematic lines, adjusting the initial line)
+        #### Translate the bonds so that they correspond to the current order of the atoms
 
-        extra_lines = []
+        # All bond lines that are associated with removed atoms (are not in self.bonds)
+        # are added to extre_lines and then removed
+        extra_lines = [] # Will contain all unnecessary lines
         for line in new_content:
             if "M  END" in line:
                 break
             if len(line) == 22:
                 if line not in self.bonds:
                     extra_lines.append(line)
+        # Removes all the unnecessary line from new_content
         for line in extra_lines:
             new_content.remove(line)
 
+        # Getting the final element ('\n\n\n\n', i.e. 4 empty lines) in new_content while removing it
+        # - will be added again after all the substituent subblocks are added
         end_line = new_content.pop(-1)
 
+        # Using function renumber_main_block to replace old atom numbers in the bond lines for new
+        # self.save_atoms_lines contains all the atom lines that were in the initial file
         self.renumber_main_block(new_content, self.save_atoms_lines)
 
+        # Adding the whole block of substituents (self.subblock) and the end_line to new_content
         new_content = new_content + self.subblock
         new_content.append(end_line)
 
-        no_main_atoms = 0
-        no_main_bonds = 0
-        init_line = ""
-        index_init = 0
-        delete_lines = []
+        # Initializing variables
+        no_main_atoms = 0 # For counting atoms
+        no_main_bonds = 0 # For counting bonds
+        init_line = "" # Will be replaced by the actual initial line
+        index_init = 0 # Will be the index of the initial line
+        delete_lines = [] # Will contain all bond lines that need to be deleted because they are between the same atom
+
+        # Removing line containing the version of MarvinSketch with which it the file was created
+        # in case it wasn't removed before
         for line in new_content:
             if "Mrv" in line:
                 new_content.remove(line)
                 break
+
         for line in new_content:
             if "V2000" in line:
+                # Finding the index of the V2000 of the main block to replace it with updated numbers of atoms and bonds
                 init_line = copy.deepcopy(line)
                 index_init = new_content.index(line)
             if len(line) > 68:
+                # Counting atom lines (i.e. counting atoms)
                 no_main_atoms += 1
             if len(line) == 22:
                 if line.split()[0] == line.split()[1]:
+                    # Preparing to delete all bond lines containing connections of the same atoms
+                    # in case they weren't deleted (should have been deleted, but just to be safe)
                     delete_lines.append(line)
                 else:
+                    # Counting bond lines (i.e. counting bonds)
                     no_main_bonds +=1
             if "M  END" in line:
+                # Ending the loop when "M  END" is reached to ensure only main block is involved
                 break
+
+        # Delete all lines that were identified previously to contain bonds between the same atoms
         for line in delete_lines:
             if line in new_content:
                 new_content.remove(line)
 
         # Creating the initial line if variable attachment present in the molecule
+        # with the updated numbers of atoms and bonds
         atom_part = (3 - len(str(no_main_atoms))) * " " + str(no_main_atoms)
         bond_part = (3 - len(str(no_main_bonds))) * " " + str(no_main_bonds)
         new_init_line = atom_part + bond_part + "  " + init_line[8:]
@@ -707,50 +786,65 @@ class markmol(object):
         return copy.deepcopy(new_content)
 
     def renumber_main_block(self, new_content, main_block_init):
-        # Replaces all keys in the main block
-        # Can help define it with - before first M END  - the rest are subblocks
-        # Also create new atom_symbols dictionary and compare with the ones created when R is used
 
-        # These two are definitely somewhere already - no need to create them again
+        #### Replaces all old atom numbers in the bond lines with new ones in the final version of the file
 
-        main_dict_keys = []
-        main_block_fin = []
+        # TODO: These two are definitely somewhere already - no need to create them again???
 
-        new_file = open("newcontent.txt", "w")
-        new_file.writelines(new_content)
-        new_file.close()
+        # main_block_init contains all the atom lines that were in the initial file
+        main_dict_keys = [] # Will contain numbers of lines in the initial file that are also in the final one
+        main_block_fin = [] # Will contain all atom lines that are in the final version of the SDF file
+        L_lines = [] # Will contain coordinates of all atoms from atom lines containing "L" in the initial file
 
+        # All atom lines are added to main_block_fin
         for line in new_content:
             if len(line) > 68 and 'M' not in line:
                 main_block_fin.append(line)
 
-        L_lines = []
+        # Coordinates of the L atoms are added to L_lines
+        # Need to treat them separately, because in the final file, "L" is replaced by one of the atoms
+        # and the lines are not identical to the ones in the initial file
         if " L " in str(main_block_init):
             for line in main_block_init:
                 if line[31] == "L":
                     L_lines.append(line.split()[0])
                     L_lines.append(line.split()[1])
+
+        # Comparing atom lines in the initial and final version of the file
+        # and adding the initial line indices into a list (main_dict_keys)
         for line in main_block_fin:
             if line in main_block_init:
+                # For lines not containing "L"
                 number_init = str(main_block_init.index(line) + 1)
                 main_dict_keys.append(number_init)
                 continue
             if line.split()[0] in L_lines:
+                # For lines containing "L" - first replacing the atom symbol with "L" and then comparing it
                 line_symbol = line[31:35]
                 line = line.replace(line_symbol, "L   ")
                 number_init = str(main_block_init.index(line) + 1)
                 main_dict_keys.append(number_init)
 
-
+        # Creating dictionary and reverse dictionary for old and new atom numbering
         main_dict_values = list(range(1, len(main_dict_keys) + 1, 1))
         main_dict_values = [str(x) for x in main_dict_values]
 
-        self.main_dict_renumber = dict(zip(main_dict_keys, main_dict_values))
+        self.main_dict_renumber = dict(zip(main_dict_keys, main_dict_values)) # Converting initial to final
 
+        # Adding spaces to values with different number of digits
+        # to make sure same number of characters will be replaced in the file
+        # TODO: The spaces can sometimes cause problems when we are interested in the numbers only - make sure it's fine,
+        #  maybe only a problem when comparing the strings directly - converting to integers just fine, comparing gives not equal
+        #print(int("    5")) # This works fine
         for key in self.main_dict_renumber.keys():
             while len(key) > len(self.main_dict_renumber[key]):
                 self.main_dict_renumber[key] = " " + self.main_dict_renumber[key]
 
+        # Converting final to initial
+        # TODO: Check where the self.main_dict_renumber is used in reverse and exchange for this
+        self.main_dict_reverse_renumber = dict(zip(self.main_dict_renumber.values(), self.main_dict_renumber.keys()))
+
+        # Using the dictionary to replace all the old numbers with new in the bond lines of the new SDF file
         for line in new_content:
             if len(line) == 22:
                 l = new_content.index(line)
@@ -764,7 +858,7 @@ class markmol(object):
 
         #### Changing self.atom_symbols - removing empty atoms
 
-        atom_values = []
+        atom_values = [] # Will be list of non-empty atoms
         items = self.atom_symbols.items()
 
         # Creates list of all empty atoms (self.empty_ind) and of non-empty atoms (atom_values)
@@ -774,7 +868,7 @@ class markmol(object):
             elif item[1] != "empty":
                 atom_values.append(item[1])
 
-        # Creating new dictionary with non-empty atoms only
+        # Creates new dictionary like self.atom_symbols, but with non-empty atoms only
         atom_keys = list(range(1, len(atom_values) + 1, 1))
         new_atom_symbols = dict(zip(atom_keys, atom_values))
 
@@ -811,7 +905,7 @@ class markmol(object):
         # Initializing variables
         order = [] # Atoms where Te/Zz indicates R group is attached on the main skeleton
         replace_order = {} # All the lists of atoms
-        index = core_inchi.find("/i") # If index part in core_inchi
+        index = core_inchi.find("/i") # Finds index part in core_inchi
         label_part = "" # Encoding atoms to which something is attached
         canonical_dict = {} # Dictionary of mol_label : inchi_label (taken from label_part "value"+"key")
 
