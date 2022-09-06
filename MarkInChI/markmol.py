@@ -185,80 +185,90 @@ class markmol(object):
     #### variable attachments
     def var_attach(self, content):
 
-        # find the indices of the 'empty' atoms
-        # find the attachments for each bond, store that information,
-        # and link it to the right atom.
-        # find the indices of the atoms bound to the 'empty' atoms
-        # count the number of atom lines
-        self.atom_inds = []  # indices of empty atoms
-        attachments = []
-        bonds = []  # store the block of bonds
-        real_bonds = {}
-        self.save_atoms_lines = []
+        #### Does the following:
+        # finds the indices of the 'empty' atoms
+        # finds the attachments for each bond, store that information,
+        # and links it to the right atom.
+        # finds the indices of the atoms bound to the 'empty' atoms
+        # counts the number of atom lines
+
+        i = 0 # Indexes the atom lines
+        self.atom_inds = []  # Gets indices of empty atoms
+        self.save_atoms_lines = [] # Saves all atom_lines
+        attachments = [] # Stores variable attachments
+        bonds = []  # Stores the block of bonds
+        real_bonds = {} # Stores bonds between empty atoms and atoms attached to them (real atachment atoms)
         atom_line = False
-        i = 0
-        self.no_atomlines = 0
         bond_line = False
+
+        # Goes through the file line by line and saves information
         for line in content:
             if atom_line:
                 i += 1
-                # get atom symbols in core
-                if len(line) > 68:
-                    self.no_atomlines += 1
+                # Get atom symbols in the main block (core)
+                if len(line) > 68: # True for atom lines
+                    # If True, save the atom line
                     self.save_atoms_lines.append(line)
                     if len(line[31:34].split()) > 0:
+                        # Get the atom symbol from each atom line when is non-empty
                         self.atom_symbols[i] = line[31:34].split()[0]
                     else:
+                        # When is empty, label it "empty" atom
                         self.atom_symbols[i] = "empty"
                     if line[31] == " ":
-                        self.atom_inds.append(str(i))  # store empty atom index
+                        # When is empty, store the empty atom index in self.atom_inds
+                        self.atom_inds.append(str(i))
                 else:
-                    # atoms' block is finished and bonds' block begins
+                    # Atom block is finished and bond block begins
                     atom_line = False
                     bond_line = True
             if bond_line:
-                # store bonds
+                # Store bonds
                 if line[0] != "M" and "F" not in line:
-                    # bond
+                    # If True, it is bond line
                     bonds.append(line)
                 else:
+                    # If False, bond block is finished
                     bond_line = False
             if line.find("M  SAL") != -1:
-                # get variable attachment points
+                # Get variable attachment points
                 attachments.append(line.split()[4:])
             if line[0] == "M" and line.find("END") != -1:
-                # end for loop after core is finished
+                # End for loop after core is finished - went through the whole main block
                 break
             if line.find("999 V2000") != -1:
+                # If True, next line will be atom line
                 atom_line = True
 
-        # Atoms will be reassigned if there are any 'empty' atoms
+        # Atoms will be renumbered if there are any 'empty' atoms
         self.renumber = False
         if 'empty' in self.atom_symbols.values():
             self.renumber = True
 
-        # store the bond between the empty atom and the real attachment atom.
+        # Store the bond between the empty atom and the real attachment atom
         for b in bonds:
             for ind in self.atom_inds:
                 if b.split()[0] == ind:
                     real_bonds[ind] = b.split()[1]
-                else:
-                    if b.split()[1] == ind:
-                        real_bonds[ind] = b.split()[0]
+                elif b.split()[1] == ind:
+                    real_bonds[ind] = b.split()[0]
 
-        # modify
-        # substract the number of 'empty atoms'*2 from the number of atoms
-        # AND the number of bonds on the top, delete 'empty atoms' and atoms
-        # that are bound to them (variable-bond atoms), and corresponding bonds
+        # Modify the content of the file to create a new SDF file
+        # Substract the number of 'empty atoms'*2 from the number of atoms AND the number of bonds on the top
+        # Delete 'empty atoms' and atoms that are bound to them (variable-bond atoms) from the atom block,
+        # and corresponding bonds from the bond block
+
         atom_ids = {}  # dict of number:atom.
-        no = len(self.atom_inds)
+        no = len(self.atom_inds) # Number of empty atoms
         new_content = []
         allow_change = True
         atom_line = False
-        to_be_deleted = list(real_bonds.values())+list(real_bonds.keys())
         count = 0
         file_count = 0
         no_atoms = 0
+
+        # List of empty atoms and real atoms bonded to them
+        to_be_deleted = list(real_bonds.values())+list(real_bonds.keys()) # List of empty atoms and real atoms bonded to them
         for line in content:
             if atom_line:
                 count += 1
@@ -363,9 +373,15 @@ class markmol(object):
 
     def label_attachments(self, content):
 
-        # label all attachments (5+rank in mol file)
-        all_attachments = []
+        #### Labels all attachments (5 + rank in mol file)
+        # TODO: This function is not used by the code and probably won't be needed.
+        #  The issue is dealt with in add and build_blocks. - Remove or use.
+
+        # Add the variable attachments in each sublist to all_attachments
+        all_attachments = [] # Will contain all the attachments in one list
         for att in self.attachments: all_attachments += att
+
+        # Adds a label in the atom line probably to where it should be attached
         new_content = []
         file_count = 0
         atom_count = 0
@@ -390,106 +406,134 @@ class markmol(object):
             if line.find("999 V2000") != -1:
                 atom_line = True
             file_count += 1
+
         return copy.deepcopy(new_content)
 
     def label(self, content):
 
-        attach_list = []
+        #### Creates the M ISO line in the newly created SDF file
+
+        # Add the variable attachments in each sublist to attach_list
+        attach_list = []  # Will contain all the attachments in one list
         for l in self.attachments:
             attach_list += l
+
+        # All atoms that need labelling will be in atoms
+        # (R - R substituents, L - lists of atoms, attach_list - variable attachments, self.XHn_group - var attach with XHn groups only)
         R = self.Rpositions
-        print(f"Rpositions: {R}")
         L = list(self.list_of_atoms.keys())
         atoms = list(set(R + L + list(self.attach_ids.keys()) + attach_list + self.XHn_groups))
-        # all atoms that need labelling now form a set "all_atoms"
-        all_atoms = []
+
+        # Reducing atoms to list of unique integers
+        all_atoms = [] # Will contain all the atoms that need labelling only once and as integers
         for atom in atoms:
             if int(atom) not in all_atoms:
                 all_atoms.append(int(atom))
-        # all_atoms is int list
         all_atoms.sort()
         print(f"all_atoms: {all_atoms}")
-        i = 0
-        new_all_atoms = copy.deepcopy(all_atoms)
-        # new_all_atoms contains all atoms other than the empty and real atoms
-        print(f"no_atoms: {self.no_atoms}")
 
-        if self.main_dict_renumber != {} or self.main_dict_renumber.values() != self.main_dict_renumber.keys():
-            delete_atom = []
+        print(f"no_atoms: {self.no_atoms}") # Total number of atoms
+
+        i = 0  # Used for locating atoms in all_atoms
+        if self.main_dict_renumber != {} and self.main_dict_renumber.values() != self.main_dict_renumber.keys():
+            # If needed to renumber the atoms because they have different indices in the old and new SDF files
+            # Will run if the dictionary is non-empty and has different keys from values
+            delete_atom = [] # Will contain atoms to delete (not in the new SDF file - mainly connected to empty atoms)
             for at in all_atoms:
                 if str(at) in list(self.main_dict_renumber.keys()):
+                    # Renumber atoms in all_atoms to correspond to the new numbering
                     new_at = int(self.main_dict_renumber[str(at)])
                     all_atoms[i] = new_at
                 elif str(at) not in list(self.main_dict_renumber.keys()) and at > self.no_atoms:
+                    # Add the atoms that are not in the dictionary to delete_atom list
                     delete_atom.append(at)
                 i += 1
-            all_atoms = list(set(all_atoms) - set(delete_atom))
-            new_atom_symbols = copy.deepcopy(self.renumber_dict())
+            all_atoms = sorted(list(set(all_atoms) - set(delete_atom))) # Remove atoms that shouldn't be labeled
+            new_atom_symbols = copy.deepcopy(self.renumber_dict()) # Get updated version of self.atom_symbols
         else:
             for at in all_atoms:
                 if int(at) > self.no_atoms:
-                    new_all_atoms = all_atoms[:i]
+                    all_atoms = all_atoms[:i]
                     break
                 i += 1
-            all_atoms = copy.deepcopy(new_all_atoms)
-            new_atom_symbols = self.atom_symbols
+            new_atom_symbols = self.atom_symbols # No numbers were changed in all_atoms, so this doesn't need a change
 
         print(f"all_atoms: {all_atoms}")
-        n = len(all_atoms)
-        p = str(n)
+        no_labeled = str(len(all_atoms)) # Number of labeled atoms to add into M ISO line
         iso_line = f"M  ISO"
-        iso_line += (3-len(p))*" "+p
-        for p in all_atoms:
-            # label
-            a = new_atom_symbols[p]
+        iso_line += (3-len(no_labeled))*" "+no_labeled
+
+        # Creates labels for connecting atoms to be put into M ISO line
+        for atom in all_atoms:
+            atom_sym = new_atom_symbols[atom] # Get the symbol of atom to be labeled
             table = Chem.GetPeriodicTable()
-            atomic_mass = int(table.GetMostCommonIsotopeMass(a))
-            label = str(atomic_mass + 5 + p)
-            iso_line += (4-len(str(p)))*" "+str(p)+(4-len(label))*" "+label
+            atomic_mass = int(table.GetMostCommonIsotopeMass(atom_sym)) # Get its atomic mass from the periodic table
+            label = str(atomic_mass + 5 + atom) # Generates a label
+            # Creates M ISO line (M  ISO  no_labeled   atom   label   atom   label   atom   label),
+            # atoms are represented by indices
+            iso_line += (4-len(str(atom)))*" "+str(atom)+(4-len(label))*" "+label
+
         iso_line += "\n"
-        new_content = []
-        replace = True
+
+        # Insert the M ISO line right before the first M END line
         for line in content:
-            if line.find("M  END") != -1 and replace:
-                new_content.append(iso_line)
-                replace = False
-            new_content.append(line)
-        return copy.deepcopy(new_content)
+            if line.find("M  END") != -1:
+                iso_index = content.index(line)
+                content.insert(iso_index, iso_line)
+                break
+
+        return copy.deepcopy(content)
 
     def relabel_core(self, inchi):
 
-        # for now we just delete /i layer
-        index = inchi.find("/i")
-        new_inchi = ""
-        if index != -1:
+        #### Deletes the isotope layer (/i) from the InChI - that accounts for connectivity
+
+        index = inchi.find("/i") # Find where is the isotope layer (-1 if is not there)
+
+        if index != -1: # If the index layer is present
             suf = ""
-            if inchi[index+2:].find("/") != -1:
+            if inchi[index+2:].find("/") != -1: # If the InChI continues after the /i layer
+                # suf will contain everything after the /i layer, starting with "/"
                 suf = "/"+"/".join(inchi[index+2:].split("/")[1:])
-            new_inchi = inchi[:index]+suf
+            new_inchi = inchi[:index]+suf # Add together the parts before and after the isotope layer
         else:
-            new_inchi = inchi
+            new_inchi = inchi # If the isotope layer is not there
+
         return new_inchi
 
     def relabel_sub(self, mol):
 
-        # returns inchi for subs with more than 1 main atom and smiles otherwise
+        #### Returns InChI for substituents with more than 1 main atom and SMILES otherwise
+        # mol - substituent in mol format
+
         sub_inchi = ""
+
         for atom in mol.GetAtoms():
-            if atom.GetIsotope() > 0:
-                idx = atom.GetIdx()
-                rwmol = Chem.RWMol(mol)
-                single = Chem.rdchem.BondType.SINGLE
-                rwmol.GetAtoms()[idx].SetIsotope(0)
-                if mol.GetNumAtoms() > 1:
+
+            if atom.GetIsotope() > 0: # Only non-zero when the isotope was explicitly set, i.e. only for the connection
+                idx = atom.GetIdx() # Get index of the connecting atom
+                rwmol = Chem.RWMol(mol) # RWMol is Mol that can be modified
+                rwmol.GetAtoms()[idx].SetIsotope(0) # Set the isotope of the connecting atom back to zero
+
+                if mol.GetNumAtoms() > 1: # If number of atoms in the substituent is bigger than one
+                    # Add Te atom by a single bond to the connecting atom to create a valid molecule and obtain InChI
                     rwmol.AddAtom(Chem.Atom("Te"))
+                    single = Chem.rdchem.BondType.SINGLE
                     rwmol.AddBond(idx, mol.GetNumAtoms(), order = single)
                     sub_inchi = Chem.MolToInchi(rwmol)
-                    # check sub_inchi is valid
+                    # Check sub_inchi is valid
+
                     if Chem.rdinchi.InchiToMol(sub_inchi) == None:
                         raise RuntimeError("Sub_inchi invalid")
+
+                    # Get only the part of InChI without "InChI=1S/"
                     sub_inchi = "/".join(sub_inchi.split("/")[1:])
+
                 else:
+
+                    # If XHn group, get SMILES instead (will be a single letter - i.e. C, N, O,...)
                     sub_inchi = Chem.MolToSmiles(rwmol)
+
         return sub_inchi
 
     def large_var_attach(self, new_content):
@@ -933,7 +977,7 @@ class markmol(object):
                 if str(int(part.split("+")[1]) - 5) in self.list_of_atoms.keys():
                     replace_order[(str(int(part.split("+")[1]) - 5))] = str(int(part.split("+")[0]))
 
-        # Start creating MarkInChI by relabeling Te into Zz in core_inchi
+        # Start creating MarkInChI by relabeling Te into Zz in core_inchi, remove H on Te and remove the /i layer
         if core_inchi.find("Te") != -1:
             mark_inchi = self.relabel_core(zz.te_to_zz(core_inchi))
         else:
@@ -943,9 +987,11 @@ class markmol(object):
 
         # Creating parts of MarkInChI for R groups attached
         for num in order:
-            if num not in list(self.main_dict_renumber.values()):
+            #if num not in list(self.main_dict_renumber.values()):
+            if self.main_dict_renumber == {}:
                 # When there is no variable attachment in the molecule
-                continue
+                # TODO: Is it only for no var_attach in the molecule??? Wouldn't condition with {} be better?
+                num_old = num
             else:
                 # TODO: Perhaps renumber self.Rpositions?
                 # Getting old index of the atom since it's associated with this in self.Rpositions
