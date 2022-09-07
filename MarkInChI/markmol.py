@@ -143,23 +143,22 @@ class markmol(object):
 
     def add(self, content):
 
-        # This function adds 3 empty lines before each substituent and 4 $ signs
-        # (to make its own mol).
-        # labels connection points on substituents.
-        content[0] = "\n\n\n"
-        new_content = []
+        ##### This function adds 3 empty lines before each substituent and 4 $ signs (to make its own mol)
+        # Labels connection points on substituents
+
+        content[0] = "\n\n\n" # Puts 3 empty lines at the beginning of the file
+        new_content = [] # Will contain the new file content
         add_line1 = "$$$$"
         add_line2 = "\n\n\n\n"
         i = 0
         count = 1
         atom_line = False
         for line in content:
-            # label the 'connection' atom on the substituent with isotopic
-            # label 8.
+            # Label the 'connection' atom on the substituent with isotopic label 8.
             if i > len(self.connections):
                 raise Exception("Probably M APO missing at one of the substituents in the molfile - check.")
             if i > 0 and count == int(self.connections[i-1]):
-                # must be mol V2000
+                # Must be mol V2000
                 if atom_line:
                     if len(line) > 68:
                         new_line = line[:35]+"8"+line[36:]
@@ -187,13 +186,13 @@ class markmol(object):
 
         #### Does the following:
         # finds the indices of the 'empty' atoms
-        # finds the attachments for each bond, store that information,
-        # and links it to the right atom.
+        # finds the attachments for each bond, store that information, and links it to the right atom
         # finds the indices of the atoms bound to the 'empty' atoms
         # counts the number of atom lines
+        # Second part starts building a new file and decides whether there is a large attachment
 
         i = 0 # Indexes the atom lines
-        self.atom_inds = []  # Gets indices of empty atoms
+        self.empty_inds = []  # Gets indices of empty atoms
         self.save_atoms_lines = [] # Saves all atom_lines
         attachments = [] # Stores variable attachments
         bonds = []  # Stores the block of bonds
@@ -216,8 +215,8 @@ class markmol(object):
                         # When is empty, label it "empty" atom
                         self.atom_symbols[i] = "empty"
                     if line[31] == " ":
-                        # When is empty, store the empty atom index in self.atom_inds
-                        self.atom_inds.append(str(i))
+                        # When is empty, store the empty atom index in self.empty_inds
+                        self.empty_inds.append(str(i))
                 else:
                     # Atom block is finished and bond block begins
                     atom_line = False
@@ -245,88 +244,106 @@ class markmol(object):
         if 'empty' in self.atom_symbols.values():
             self.renumber = True
 
-        # Store the bond between the empty atom and the real attachment atom
+        # Store the bond between the empty atom and the real attachment atom as dictionary and also a list
+        list_real_bonds = [] # Will store empty bond lines
         for b in bonds:
-            for ind in self.atom_inds:
+            for ind in self.empty_inds:
                 if b.split()[0] == ind:
                     real_bonds[ind] = b.split()[1]
+                    list_real_bonds.append(b)
                 elif b.split()[1] == ind:
                     real_bonds[ind] = b.split()[0]
+                    list_real_bonds.append(b)
 
         # Modify the content of the file to create a new SDF file
         # Substract the number of 'empty atoms'*2 from the number of atoms AND the number of bonds on the top
         # Delete 'empty atoms' and atoms that are bound to them (variable-bond atoms) from the atom block,
         # and corresponding bonds from the bond block
 
-        atom_ids = {}  # dict of number:atom.
-        no = len(self.atom_inds) # Number of empty atoms
-        new_content = []
-        allow_change = True
+        attach_ids = {}  # Dictionary of real atoms - number:atom.
+        no = len(self.empty_inds) # Number of empty atoms
+        new_content = [] # Will be content of new file
+        #allow_change = True # TODO: Check if allow_change is needed - the loop breaks after first M END anyway and there is only one V2000
         atom_line = False
-        count = 0
-        file_count = 0
-        no_atoms = 0
+        count = 0 # Number of an atom line
+        file_count = 0 # Number of line in a file
+        no_atoms = 0 # TODO: Might not be needed
 
         # List of empty atoms and real atoms bonded to them
-        to_be_deleted = list(real_bonds.values())+list(real_bonds.keys()) # List of empty atoms and real atoms bonded to them
+        to_be_deleted = list(real_bonds.values())+list(real_bonds.keys())
+
         for line in content:
-            if atom_line:
+            if atom_line: # If going through the atom lines
                 count += 1
-                if len(line) > 68:
+                if len(line) > 68: # If it is still an atom line or if the atom block is already over
                     delete_line = False
-                    list_count = 0
+                    list_count = 0 # To count through to_be_deleted
                     for d in to_be_deleted:
-                        if str(count) == d:
+                        if str(count) == d: # If the atom line contains empty or real atom (and hence should be deleted)
                             delete_line = True
-                            # get all real atoms
-                            if 2*list_count < len(to_be_deleted):
-                                atom_ids[count] = line[31:34].split()[0]
+                            # Get all real atoms
+                            if 2*list_count < len(to_be_deleted): # Real atoms are in the first half of to_be_deleted
+                                attach_ids[count] = line[31:34].split()[0] # Add real atom index to attach_ids
                         list_count += 1
 
-                    if not delete_line:
+                    if not delete_line: # If the line shouldn't be deleted
                         new_line = line
                         for at in self.list_of_atoms.keys():
-                            # change the L atom line to the first instance atom
-                            # in the atoms' block.
+                            # Replace L in the atom line by the first atom in the list of atoms associated with it
                             if count == int(at):
                                 sym = self.list_of_atoms[at][0]
                                 nn = len(sym)-1
                                 new_line = line.replace(("L"+nn*" "), sym)
-                                self.atom_symbols[count] = sym
-                        new_content.append(new_line)
+                                self.atom_symbols[count] = sym # Replace "L" in the self.atom_symbols also by this atom
+                        new_content.append(new_line) # Add the line to the new file (new_content)
                 else:
+                    # Atom block is over
                     atom_line = False
-                    new_content.append(line)
+                    new_content.append(line) # The first bond line is appended
             else:
-                if line.find("999 V2000") != -1 and allow_change:
+                if line.find("999 V2000") != -1: #and allow_change:
+                    atom_line = True # Atom lines follow
                     # Adjust top core mol statement (e.g. no of atoms, etc.)
                     # Needs to be created even if var_attach transforms it later (it works with the already created line)
-                    atom_line = True
                     no_atoms = int(line.split()[0])-2*no
                     no_bonds = int(line.split()[1])-no
                     atom_part = (3 - len(str(no_atoms)))*" "+str(no_atoms)
                     bond_part = (3 - len(str(no_bonds)))*" "+str(no_bonds)
                     new_line = atom_part+bond_part+"  "+line[8:]
                     new_content.append(new_line)
-                    allow_change = False
+                    #allow_change = False
                 else:
-                    if not atom_line and not allow_change:
-                        if len(line) == 22:
-                            delete_line = False
-                            for dd in to_be_deleted:
-                                cn1 = line.split()[0] == dd
-                                cn2 = line.split()[1] == dd
-                                if cn1 or cn2:
-                                    delete_line = True
-                            if not delete_line:
-                                new_content.append(line)
-                        else:
-                            new_content.append(line)
+                    #if not atom_line: #and not allow_change:
+                    #    if len(line) == 22:
+                    #        delete_line = False
+                    #        for dd in to_be_deleted:
+                    #            cn1 = line.split()[0] == dd
+                    #            cn2 = line.split()[1] == dd
+                    #            if cn1 or cn2:
+                    #                delete_line = True
+                    #        if not delete_line:
+                    #            new_content.append(line)
+                    #    else:
+                    #        new_content.append(line)
+                    #else:
+                    #    new_content.append(line)
+                    # TODO: If allow_change really not necessary, this should be sufficient.
+                    if len(line) == 22: # True for bond lines
+                        delete_line = False
+                        for dd in to_be_deleted:
+                            # All bonds containing empty and real atoms will not be included in the new file
+                            # Checking if the atoms are contained in the bonds
+                            cn1 = line.split()[0] == dd
+                            cn2 = line.split()[1] == dd
+                            if cn1 or cn2:
+                                delete_line = True
+                        if not delete_line:
+                            new_content.append(line) # Adding bond lines to the new file
                     else:
+                        # Contain extra information, will be extracted and the lines will be deleted later
                         new_content.append(line)
             if line.find ("M  END") != -1:
-                # when the core mol finishes append the rest of the mol file
-                # and stop exit the for loop.
+                # When the core mol finishes append the rest of the mol file and stop exit the for loop
                 new_content += content[file_count+1:]
                 break
             file_count += 1
@@ -334,38 +351,53 @@ class markmol(object):
         for sub_attach in attachments:
             sub_attach.sort()
 
-        print(f"atom_inds: {self.atom_inds}")
+        print(f"empty_inds: {self.empty_inds}")
         print(f"attachments: {attachments}")
         print(f"real_bonds: {real_bonds}")
-        print(f"atom_ids: {atom_ids}")
+        print(f"attach_ids: {attach_ids}")
         print(f"atom_symbols: {self.atom_symbols}")
+
+        # Making some of the variables global
         self.attachments = attachments
-        self.attach_ids = atom_ids
-        self.no_atoms = no_atoms
+        self.attach_ids = attach_ids
+        # TODO: Is this necessary? YES!!!
+        self.no_atoms = no_atoms # Will be used later to generate M ISO line
         self.content = content
         self.bonds = bonds
 
-
         # Check if the variable attachment is larger than one XHn group
-        for empty in self.atom_inds:
-            bonds_adjust = list.copy(self.bonds)
-            next_atom = 0
-            for bond in self.bonds:
-                if bond.split()[0] == empty:
-                    next_atom = bond.split()[1]
-                    bonds_adjust.remove(bond)
-                elif bond.split()[1] == empty:
-                    next_atom = bond.split()[0]
-                    bonds_adjust.remove(bond)
-
-            for bond in bonds_adjust:
-                if bond.split()[0] == next_atom or bond.split()[1] == next_atom:
-                    self.large_substituent = True
-                    break
-
-            if self.large_substituent == True:
+        bonds_adjust = set(list.copy(self.bonds)) # Copy of list of all bonds (needs to be a copy)
+        bonds_adjust -= set(list_real_bonds) # Remove all empty-real atom bonds
+        for real_atom in attach_ids:
+            # If at least one real atom has another one attached, self.large_substituent = True
+            if str(real_atom) in str(bonds_adjust):
+                self.large_substituent = True
                 break
+        # for empty in self.empty_inds:
+            next_atom = 0 # Real atom??? # TODO: If next atom is really real atom, we can simplify it? Or not if we need to remove bonds with empty atoms
+            # Remove bonds between real and empty atoms from bonds_adjust
+            #for bond in self.bonds:
+            #    if bond.split()[0] == empty:
+                    #next_atom = bond.split()[1]
+            #        bonds_adjust.remove(bond)
+            #    elif bond.split()[1] == empty:
+                    #next_atom = bond.split()[0]
+            #        bonds_adjust.remove(bond)
+            #bonds_adjust -= set(list_real_bonds)
+            #for real_atom in attach_ids:
+            #    if str(real_atom) in str(bonds_adjust):
+            #        self.large_substituent = True
+            #        break
+            #for bond in bonds_adjust:
+                #if bond.split()[0] == next_atom or bond.split()[1] == next_atom:
+            #    if int(bond.split()[0]) in attach_ids or int(bond.split()[1]) in attach_ids:
+            #        self.large_substituent = True
+            #        break
 
+            #if self.large_substituent == True:
+            #    break
+
+        # Will run the self.large_var_attach function if there is larger var attach than XHn
         if self.large_substituent == True:
             new_content = self.large_var_attach(new_content)
 
@@ -544,9 +576,9 @@ class markmol(object):
         atom_blocks = [] # Will contain all atom lines associated with the substituents (to delete them from main block)
         self.subblock = [] # Will contain all new subblocks created for large_var_attach
 
-        # For each empty atom check to what it is connected (self.atom_inds contains all the empty atoms)
+        # For each empty atom check to what it is connected (self.empty_inds contains all the empty atoms)
         # Then find all the connections within the attachments
-        for index in self.atom_inds:
+        for index in self.empty_inds:
             group_atoms = [] # Will contain all the atoms in the substituent
             # TODO: Rename save_bonds here, it's confusing that it has the same name in both parts of the loop
             save_bonds = [] # Will contain all the bonds to empty atoms, so they can be later deleted
@@ -905,11 +937,9 @@ class markmol(object):
         atom_values = [] # Will be list of non-empty atoms
         items = self.atom_symbols.items()
 
-        # Creates list of all empty atoms (self.empty_ind) and of non-empty atoms (atom_values)
+        # Creates list of all non-empty atoms (atom_values) as integers
         for item in items:
-            if item[1] == "empty" and item[0] not in self.empty_ind:
-                self.empty_ind.append(item[0])
-            elif item[1] != "empty":
+            if item[1] != "empty":
                 atom_values.append(item[1])
 
         # Creates new dictionary like self.atom_symbols, but with non-empty atoms only
@@ -1048,12 +1078,12 @@ class markmol(object):
 
         num_var = ""
         var_part = ""
-        atom_ids = self.attach_ids
+        attach_ids = self.attach_ids
         total_list = [] # List of sums of attachment indices
 
         # Finding the indices of the atoms to which it is attached and adding them together
         # to create ranking of the substituents (from lowest total to highest) - for canonicality
-        for i in range(0, len(list(atom_ids.keys()))):
+        for i in range(0, len(list(attach_ids.keys()))):
             total = 0
             for mi in self.attachments[i]:
                 # TODO: If we renumber self.atom_symbols and translate everything?
@@ -1068,7 +1098,7 @@ class markmol(object):
 
         # Using the total_list to sort the substituents
         # from lowest to highest sum of atom attachment numbers
-        orig_order = list(range(1, len(list(atom_ids.keys())) + 1, 1))
+        orig_order = list(range(1, len(list(attach_ids.keys())) + 1, 1))
         var_order = dict(zip(orig_order, total_list))
         var_order = dict(sorted(var_order.items(), key=lambda item: item[1]))
 
@@ -1117,8 +1147,8 @@ class markmol(object):
                 attach_done = True
 
             # Find if attached by Te (Zz)
-            mol_rank = list(atom_ids.keys())[i - 1]
-            symbol = atom_ids[mol_rank]
+            mol_rank = list(attach_ids.keys())[i - 1]
+            symbol = attach_ids[mol_rank]
             attach_points = []
 
             # If attach_done = True, the attachment part of the string has been already created - no need to do it again
