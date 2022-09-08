@@ -12,173 +12,205 @@ class markmol(object):
 
     def __init__(self, name):
 
+        # Open the SDF/MOL file containing the Markush structure and read the contents
         file = open(name, "r")
         content = file.readlines()
-        self.help_label = Label()
-        self.atom_symbols = {}
-        self.Rpositions = []  # number of each Te atom
-        self.Rsubstituents = []
-        self.ctabs = []  # no. of each substituent after $RGP
-        self.connections = []
-        self.list_of_atoms = {}
-        self.attachments = []
-        self.no_atoms = 0
-        self.attach_reordered = False
-        self.main_dict_renumber = {}
-        self.XHn_groups = []
-        self.connections = []
-        self.subst_order = []
-        self.empty_ind = []
+        file.close()
+
+        # Initialize most of the global variables, set names for imported functions/classes
+        self.help_label = Label() # Imported class for labeling atoms, finding their position given their label, etc.
+        self.atom_symbols = {} # All atoms in the main block of the original SDF file {index in SDF file : atom symbol}
+        self.list_of_atoms = {} # Lists of atoms {atom index in SDF file : list of symbols}
+        self.main_dict_renumber = {} # For renumbering main block when some lines deleted {old number: new number}
+        self.Rpositions = []  # Number of each Te atom (R group) in the original atom block
+        self.Rsubstituents = [] # List of lists of substituents associated with each R group
+        self.ctabs = []  # Number of each substituent after $RGP
+        self.connections = [] # Number of the "connecting" atom in each substituent
+        self.attachments = [] # List of lists of variable attachment points for each attachment
+        self.XHn_groups = [] # Number of each XHn group (i.e. the atom representing it) in the original main block
+        self.subst_order = [] # Order of R groups in the SDF file related to the R atoms in main block
+        self.no_atoms = 0 # Number of atoms in the main block
+        self.large_substituent = False # True if large variable attachment directly attached to the core structure
+
+        # Create the new RDKIT compatible file
         content = self.convert(content)
         new_name = name.split(".")[0] + "_RDKIT.sdf"
         new_file = open(new_name, "w")
         new_file.writelines(content)
         new_file.close()
+
+        # Get core structure and substituents from the RDKIT compatible file
         supply = Chem.SDMolSupplier(new_name)
         substituents = []
         for mol in supply:
             if mol is not None:
                 substituents.append(mol)
         self.core_mol = copy.deepcopy(supply[0])
+
+        # Get the substituents associated with each R group
         i = 1
         ctabs = self.ctabs
-        while i < len(ctabs) - 1:
+        while i < len(ctabs) - 1: # Creates list of lists of substituents, each inner list corresponding to one R group
             self.Rsubstituents.append(substituents[int(ctabs[i - 1]):int(ctabs[i])])
             i += 1
         self.Rsubstituents.append(substituents[int(ctabs[i - 1]):])
+
+        # Split substituents into R groups and var attach directly on the bonds
         divide_subst = len(self.subst_order)
-        R_subst = self.Rsubstituents[:divide_subst]
-        other_subst = self.Rsubstituents[divide_subst:]
+        R_subst = self.Rsubstituents[:divide_subst] # R substituents are at the beginning
+        other_subst = self.Rsubstituents[divide_subst:] # Rest are variable attachments directly drawn on the structure
+
+        # Create dictionary to order the R substituents correctly
         subst_dict = dict(zip(self.subst_order, R_subst))
         subst_dict = dict(sorted(subst_dict.items(), key=lambda item: item[0]))
         self.Rsubstituents = list(subst_dict.values()) + other_subst
-        print(self.produce_markinchi())
-        file.close()
 
+        # Create the MarkInChI and print it
+        print(self.produce_markinchi())
 
 
 
 
     def convert(self, content):
 
-        # This function converts a normal markush SDF file to RDKIT compatible
-        # SDF file. Input: list. Output: list.
-        self.large_substituent = False
+        #### This function converts a normal Markush SDF file to RDKIT compatible SDF file. Input: list. Output: list.
+
+        # Adjust the content of the file by deleting, modifying and adding lines
+        # Extract useful information into variables
         new_content = self.replaceR(content)
         new_content = self.var_attach(new_content)
         new_content = self.delete(new_content)
         new_content = self.add(new_content)
 
+        # If large variable attachment, adjust the main block in the RDKIT compatible file
         if self.large_substituent == True:
             new_content = self.main_block(new_content)
 
+        # If there are empty atoms present initially, the main block will be renumbered
+        # (because they are deleted and sometimes line after them remain in the file)
         if self.renumber == True and self.large_substituent == False:
             new_content = self.renumber_main_block(new_content, self.save_atoms_lines)
 
+        # Create M ISO line
         new_content = self.label(new_content)
 
         return copy.deepcopy(new_content)
 
     def replaceR(self, content):
 
-        # This function 1. replaces R groups 'R#' in the file by Te atoms 'Te'.
-        # 2. gets list of atoms indices.
-        # 3. get indices of each R group (e.g. R1 is atom 9, etc.)
-        # 4. get the point of connections of R group substituents
-        # 5. delete the number after "$RGP" line
-        # 6. get the number of substituents per R group (using "ctab")
-        ctab = 0
-        new_content = []
+        #### This function:
+        # 1. Replaces R groups 'R#' in the file by Te atoms 'Te'
+        # 2. Gets list of atoms indices
+        # 3. Get indices of each R group (e.g. R1 is atom 9, etc.)
+        # 4. Get the point of connections of R group substituents
+        # 5. Delete the number after "$RGP" line
+        # 6. Get the number of substituents per R group (using "ctab")
+
+        ctab = 0 # Counts through the substituents
+        new_content = [] # Will contain the new file content
         replace = True
-        list_of_atoms = {}
+        list_of_atoms = {} # Will contain lists of atoms associated with a position in the molecule
+
         for line in content:
             if replace:
                 new_line = line.replace("R#", "Te")
             else:
-                # delete after $RGP
+                # Delete after $RGP
                 new_line = " "
                 replace = True
-                self.ctabs.append(ctab)
+                self.ctabs.append(ctab) # Save the index of the last substituent associated with a R group
             if line.find("$END CTAB") != -1:
-                ctab += 1
+                ctab += 1 #
             if line.find("$RGP") != -1:
-                replace = False
+                replace = False # Will save ctab in the next cycle, because $RGP indicates start of new R group
             if line.find("M  ALS") != -1:
+                # Save lists of atoms
                 index = line.split()[2]
                 atom_list = line.split()[5:]
                 list_of_atoms[index] = atom_list
-            if line.find("M  RGP") != -1:
-                # get SN of R gourps
+            if line.find("M  RGP") != -1: # "M  RGP number-of-R-groups R-position order-in-the-file R-position order-in-the-file"
+                # Get positions of R groups in the molecule and in which order are listed in the file
                 parts = line.split("RGP")[1].split()
                 for i in range(1, len(parts), 2):
-                    self.Rpositions.append(parts[i])
+                    self.Rpositions.append(parts[i]) # R positions
                 for i in range(2, len(parts), 2):
-                    self.subst_order.append(parts[i])
+                    self.subst_order.append(parts[i]) # Substituent order
             if line.find("M  APO") != -1:
-                # find points of connections for each substituent
+                # Find points of connections for each substituent
                 connection = line.split()[3]
                 self.connections.append(connection)
             new_content.append(new_line)
+
         self.list_of_atoms = list_of_atoms
+
+        # Save the index of the last substituent of the last group in case more will be added due to variable attachments
         self.ctabs.append(ctab)
+
         return copy.deepcopy(new_content)
 
     def delete(self, content):
 
-        # This function deletes all lines that are:
+        #### This function deletes all lines that are:
         # 1. empty space lines (a).
         # 2. start with '$' signs (a).
         # 3. all that start "M" that are not "M END" (b).
-        # 4. 'F' atom list line that comes after the bonds' block (c).
+        # 4. 'F' atom list line that comes after the bonds' block (c). (F can be an atom, so two conditions needed)
 
-        new_content = []
+        new_content = [] # Will contain the new file content
+
+        # Goes through the content and appends only the lines that don't contain any of the above
         for line in content:
-            # conditions a & b & c (see above)
+            # Conditions a & b & c (see above)
             a = (not line.isspace()) and line[0] != "$"
             b = not (line[0] == "M" and (line.find("END") == -1))
             c = not ((line.find("F") != -1) and (((len(line)-15)) % 4 == 0))
             if a and b and c:
                 new_content.append(line)
+
         return copy.deepcopy(new_content)
 
     def add(self, content):
 
         ##### This function adds 3 empty lines before each substituent and 4 $ signs (to make its own mol)
-        # Labels connection points on substituents
+        # Labels connection points on substituents - self.connections contains which of these atoms should be labelled
 
         content[0] = "\n\n\n" # Puts 3 empty lines at the beginning of the file
         new_content = [] # Will contain the new file content
-        add_line1 = "$$$$"
-        add_line2 = "\n\n\n\n"
-        i = 0
-        count = 1
+        add_line1 = "$$$$" # Will be added after each substituent
+        add_line2 = "\n\n\n\n" # Will be added after each substituent
+        i = 0 # Counting through substituents
+        count = 1 # Counting through atom lines within substituents (and also main block, but that is irrelevant)
         atom_line = False
+
+        # Adds lines to new_content, modifying them if conditions are fulfilled
         for line in content:
             # Label the 'connection' atom on the substituent with isotopic label 8.
-            if i > len(self.connections):
+            if i > len(self.connections): # Happens if not all connections are in self.connections (M APO missing)
                 raise Exception("Probably M APO missing at one of the substituents in the molfile - check.")
-            if i > 0 and count == int(self.connections[i-1]):
+            if i > 0 and count == int(self.connections[i-1]): # Labels which atom of a substituent is the connection
                 # Must be mol V2000
                 if atom_line:
-                    if len(line) > 68:
-                        new_line = line[:35]+"8"+line[36:]
+                    if len(line) > 68: # If still in atom block
+                        new_line = line[:35]+"8"+line[36:] # Labels this atom with "8"
                         new_content.append(new_line)
-                    else:
+                    else: # If atom block is over
                         atom_line = False
                         new_content.append(line)
                 else:
                     new_content.append(line)
             else:
                 new_content.append(line)
-            if line[0] == "M" and line.find("END") != -1:
-                count = 1
-                i += 1
+            if line[0] == "M" and line.find("END") != -1: # Will be true after main block and each substituent
+                count = 1 # Reset count to 1
+                i += 1 # Counts through substituents
+                # Adding spaces and "$$$$" after each substituent and also main block
                 new_content.append(add_line1)
                 new_content.append(add_line2)
             if line.find(".") != -1:
-                count += 1
+                count += 1 # Counting through (not only) the atom lines, since they contain decimal numbers
             if line.find("999 V2000") != -1:
-                atom_line = True
+                atom_line = True # Atom block follows
+
         return copy.deepcopy(new_content)
 
     #### variable attachments
