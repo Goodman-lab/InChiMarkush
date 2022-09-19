@@ -152,43 +152,13 @@ class MarkinchiGuiApp(object):
         file = askopenfile(mode='r', initialdir=path, defaultextension='.sdf',
                            filetypes=[("SDF file", ".sdf")])
         if file is not None:
-            name = os.path.basename(file.name)
-            content = file.readlines()
-            mark_obj = markmol()
-            zz = zz_convert()
-            mark_obj.help_label = Label()
-            mark_obj.atom_symbols = {}
-            mark_obj.Rpositions = []  # number of each Te atom
-            mark_obj.Rsubstituents = []
-            mark_obj.ctabs = []  # no. of each substituent after $RGP
-            mark_obj.connections = []
-            mark_obj.list_of_atoms = {}
-            mark_obj.attachments = []
-            mark_obj.attach_ids = {}
-            mark_obj.no_atoms = 0
-            content = mark_obj.convert(content)
-            new_name = name.split(".")[0]+"_RDKIT.sdf"
-            new_file = open(new_name, "w")
-            new_file.writelines(content)
-            new_file.close()
-            supply = Chem.SDMolSupplier(new_name)
-            substituents = []
-            for mol in supply:
-                if mol is not None:
-                    substituents.append(mol)
-            mark_obj.core_mol = copy.deepcopy(supply[0])
-            i = 1
-            ctabs = mark_obj.ctabs
-            print(f"ctabs: {ctabs}")
-            while i < len(ctabs):
-                mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):int(ctabs[i])])
-                i += 1
-            else:
-                if len(ctabs) > 0:
-                    mark_obj.Rsubstituents.append(substituents[int(ctabs[i-1]):])
+            #name = os.path.basename(file.name)
+            name = os.path.abspath(file.name)
+
             try:
-                print(mark_obj.produce_markinchi())
-                self.entry.insert(0, mark_obj.produce_markinchi())
+                markinchi_obj = markmol(name)
+                #print(markinchi_final)
+                self.entry.insert(0, markinchi_obj.markinchi_final)
             except IndexError:
                 msg = "Please enter a valid V2000 Markush sdf file"
                 messagebox.showerror("Error", msg)

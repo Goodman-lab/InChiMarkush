@@ -1,3 +1,5 @@
+import sys
+
 from rdkit import Chem
 import copy
 import numpy
@@ -104,7 +106,8 @@ class Label(object):
                             ranks[num] = int(num)+10+atomic_mass
                             new_inchi = self.label(new_inchi, num, str(int(num)+10))
                         else:
-                            raise RuntimeError("Same atom replaced more than once")
+                            #raise RuntimeError("Same atom replaced more than once")
+                            print("Overlap of possible substitutions - check that result is as expected.")
                 else:
                     # only replacements with no variable attachments
                     num = molecule.split("-")[0].split("H")[0]
@@ -180,7 +183,7 @@ class Label(object):
                 new_index = atom.GetIdx()
         return copy.deepcopy(new_mol), post_label
 
-    def combine(self, main_mol, sub_mol):
+    def combine(self, main_mol, sub_mol, num = None):
 
         # label 30 for sub_mol, and label 35 for main_mol
         sub_label = 0
@@ -198,7 +201,12 @@ class Label(object):
                 post_label = pre_label+30
             sub_mol.GetAtoms()[0].SetIsotope(post_label)
             sub_label = post_label
-        new_mol, main_label = self.get_index(main_mol, 35)
+
+        if num != None:
+            main_label = num
+            new_mol = main_mol
+        else:
+            new_mol, main_label = self.get_index(main_mol, 35)
         combo = Chem.CombineMols(sub_mol, new_mol)
         edcombo = Chem.EditableMol(combo)
         single = Chem.rdchem.BondType.SINGLE
@@ -211,7 +219,10 @@ class Label(object):
                 atom.SetIsotope(sub_label-30)
             if atom.GetIsotope() == main_label:
                 main_index = atom.GetIdx()
-                atom.SetIsotope(main_label-35)
+                if num == None:
+                    atom.SetIsotope(main_label-35)
+                else:
+                    atom.SetIsotope(0)
         edcombo = Chem.EditableMol(back_mol)
         edcombo.AddBond(sub_index, main_index, order=single)
         final_mol = self.sanitize(edcombo.GetMol())
@@ -246,11 +257,12 @@ class Label(object):
                 i = int(dict[key])
                 atoms += [key]*i
         return atoms[int(rank)-1]
+
     def sanitize(self, mol):
         # there is some issues with RDKIT mol produced from inchi, while the
         # mol produced from SMILES seem to be fine.
         # This also sanitize isotopic labels eg. [ch2] -> c
-        new_mol = copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol)))
+        new_mol = copy.deepcopy(Chem.MolFromSmiles(Chem.MolToSmiles(mol), sanitize = False))
         for atom in new_mol.GetAtoms():
             table = Chem.GetPeriodicTable()
             symbol = atom.GetSymbol()
@@ -278,8 +290,8 @@ class Label(object):
             valence = atom.GetTotalValence()
             default_valence = table.GetDefaultValence(atomic_number)
             electrons = table.GetNOuterElecs(atomic_number)
-            if valence != default_valence:
-                print(f"Warning: atom {atom.GetSymbol} not in default valence")
+            #if valence != default_valence:
+                #print(f"Warning: atom {atom.GetSymbol} not in default valence")
             num = (electrons-valence)
             charge = int((num%2)*numpy.sign(num))
             if atom.GetSymbol() != "C":

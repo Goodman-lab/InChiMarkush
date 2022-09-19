@@ -23,9 +23,13 @@ class helper(object):
         list_of_no = []
         for n in line.split("-"):
             # produce an ordered list canonical numbers
-            if "(" in n:
-                n_list = n.replace("(", "-").replace(")", "-").split("-")
-                list_of_no += n_list
+            if "(" or ")" in n:
+                if "," in n:
+                    n_list = n.replace(",", "-").replace("(", "-").replace(")", "-").split("-")
+                    list_of_no += n_list
+                else:
+                    n_list = n.replace("(", "-").replace(")", "-").split("-")
+                    list_of_no += n_list
             else:
                 list_of_no.append(n)
         list_int = set(map(int, list_of_no))  # convert list of numbers to int
