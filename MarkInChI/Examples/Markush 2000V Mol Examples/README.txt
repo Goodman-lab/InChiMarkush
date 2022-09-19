@@ -1,0 +1,1 @@
+This folder contains examples of Markush structures to illustrate the abilities of the algorithm.
