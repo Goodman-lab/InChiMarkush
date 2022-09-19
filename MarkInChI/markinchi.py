@@ -16,7 +16,7 @@ class MarkInChI(object):
             print("Not a MarkInChI")
         else:
             inchiplus = inchi.split("<M>")
-            # Get main inchi and substituents
+            # Get main InChI and substituents
             inchiplus_item = inchiplus.pop(0)  # inchiplus_item = main_inchi
             if inchiplus_item.find("Zz") != -1:
                 inchiplus_item = zz.zz_to_te(inchiplus_item)
@@ -112,6 +112,7 @@ class MarkInChI(object):
                         is_aromatic = mol_atom.GetIsAromatic()
                         add_index = rwmol.GetNumAtoms()
                         if self.one_atom != None:
+                            # If var attach is larger than XHn
                             new_rwmol.AddAtom(replacement)
                             new_rwmol.GetAtoms()[idx].SetIsotope(iso_num)
                             single = Chem.rdchem.BondType.SINGLE
@@ -227,7 +228,6 @@ class MarkInChI(object):
                 new_mol = copy.deepcopy(self.label.sanitize_labels(self.ranks, self.inchi, new_mol))
                 new_inchi = Chem.MolToInchi(self.label.sanitize(new_mol))
                 molecule = Chem.MolFromInchi(new_inchi)
-                new = Chem.MolToMolFile(molecule, "molecule000.sdf", kekulize=False)
                 print(f"new_inchi: {new_inchi}")
                 # if it is a new inchi then put it in the list
                 if new_inchi not in self.list_of_inchi:
