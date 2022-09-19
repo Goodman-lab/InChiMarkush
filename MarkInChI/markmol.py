@@ -5,7 +5,7 @@ from rdkit import Chem
 from zz_convert import zz_convert
 from label import Label
 
-class markmol(object):
+class MarkMol(object):
 
     """ This class is used for the conversion of a markush mol to a markush
         inchi."""
@@ -50,10 +50,12 @@ class markmol(object):
         # Get the substituents associated with each R group
         i = 1
         ctabs = self.ctabs
-        while i < len(ctabs) - 1: # Creates list of lists of substituents, each inner list corresponding to one R group
+        while i < len(ctabs): # Creates list of lists of substituents, each inner list corresponding to one R group
             self.Rsubstituents.append(substituents[int(ctabs[i - 1]):int(ctabs[i])])
             i += 1
-        self.Rsubstituents.append(substituents[int(ctabs[i - 1]):])
+        if ctabs != [] and i == 1:
+            # Adds the substituent if it is only one variable attachment
+            self.Rsubstituents.append(substituents[int(ctabs[i - 1]):])
 
         # Split substituents into R groups and var attach directly on the bonds
         divide_subst = len(self.subst_order)
@@ -67,9 +69,6 @@ class markmol(object):
 
         # Create the MarkInChI and print it
         print(self.produce_markinchi())
-
-
-
 
     def convert(self, content):
 
@@ -144,7 +143,9 @@ class markmol(object):
         self.list_of_atoms = list_of_atoms
 
         # Save the index of the last substituent of the last group in case more will be added due to variable attachments
-        self.ctabs.append(ctab)
+        # Only if ctab!=0, otherwise it would add the core structure as one of the substituents
+        if ctab != 0:
+            self.ctabs.append(ctab)
 
         return copy.deepcopy(new_content)
 
@@ -186,7 +187,7 @@ class markmol(object):
         for line in content:
             # Label the 'connection' atom on the substituent with isotopic label 8.
             if i > len(self.connections): # Happens if not all connections are in self.connections (M APO missing)
-                raise Exception("Probably M APO missing at one of the substituents in the molfile - check.")
+                raise Exception("Probably M APO missing at one of the substituents in the molfile - check. If missing, open the file in MarvinSketch and add the connection again.")
             if i > 0 and count == int(self.connections[i-1]): # Labels which atom of a substituent is the connection
                 # Must be mol V2000
                 if atom_line:
@@ -213,10 +214,9 @@ class markmol(object):
 
         return copy.deepcopy(new_content)
 
-    #### variable attachments
     def var_attach(self, content):
 
-        #### Does the following:
+        #### Variable attachments. Does the following:
         # finds the indices of the 'empty' atoms
         # finds the attachments for each bond, store that information, and links it to the right atom
         # finds the indices of the atoms bound to the 'empty' atoms
@@ -295,11 +295,10 @@ class markmol(object):
         attach_ids = {}  # Dictionary of real atoms - number:atom.
         no = len(self.empty_inds) # Number of empty atoms
         new_content = [] # Will be content of new file
-        #allow_change = True # TODO: Check if allow_change is needed - the loop breaks after first M END anyway and there is only one V2000
         atom_line = False
         count = 0 # Number of an atom line
         file_count = 0 # Number of line in a file
-        no_atoms = 0 # TODO: Might not be needed
+        no_atoms = 0 # Number of atoms in the main block
 
         # List of empty atoms and real atoms bonded to them
         to_be_deleted = list(real_bonds.values())+list(real_bonds.keys())
@@ -333,7 +332,7 @@ class markmol(object):
                     atom_line = False
                     new_content.append(line) # The first bond line is appended
             else:
-                if line.find("999 V2000") != -1: #and allow_change:
+                if line.find("999 V2000") != -1:
                     atom_line = True # Atom lines follow
                     # Adjust top core mol statement (e.g. no of atoms, etc.)
                     # Needs to be created even if var_attach transforms it later (it works with the already created line)
@@ -343,23 +342,7 @@ class markmol(object):
                     bond_part = (3 - len(str(no_bonds)))*" "+str(no_bonds)
                     new_line = atom_part+bond_part+"  "+line[8:]
                     new_content.append(new_line)
-                    #allow_change = False
                 else:
-                    #if not atom_line: #and not allow_change:
-                    #    if len(line) == 22:
-                    #        delete_line = False
-                    #        for dd in to_be_deleted:
-                    #            cn1 = line.split()[0] == dd
-                    #            cn2 = line.split()[1] == dd
-                    #            if cn1 or cn2:
-                    #                delete_line = True
-                    #        if not delete_line:
-                    #            new_content.append(line)
-                    #    else:
-                    #        new_content.append(line)
-                    #else:
-                    #    new_content.append(line)
-                    # TODO: If allow_change really not necessary, this should be sufficient.
                     if len(line) == 22: # True for bond lines
                         delete_line = False
                         for dd in to_be_deleted:
@@ -372,7 +355,7 @@ class markmol(object):
                         if not delete_line:
                             new_content.append(line) # Adding bond lines to the new file
                     else:
-                        # Contain extra information, will be extracted and the lines will be deleted later
+                        # These lines contain more information, it will be extracted and the lines will be deleted later
                         new_content.append(line)
             if line.find ("M  END") != -1:
                 # When the core mol finishes append the rest of the mol file and stop exit the for loop
@@ -392,7 +375,6 @@ class markmol(object):
         # Making some of the variables global
         self.attachments = attachments
         self.attach_ids = attach_ids
-        # TODO: Is this necessary? YES!!!
         self.no_atoms = no_atoms # Will be used later to generate M ISO line
         self.content = content
         self.bonds = bonds
@@ -405,29 +387,6 @@ class markmol(object):
             if str(real_atom) in str(bonds_adjust):
                 self.large_substituent = True
                 break
-        # for empty in self.empty_inds:
-            next_atom = 0 # Real atom??? # TODO: If next atom is really real atom, we can simplify it? Or not if we need to remove bonds with empty atoms
-            # Remove bonds between real and empty atoms from bonds_adjust
-            #for bond in self.bonds:
-            #    if bond.split()[0] == empty:
-                    #next_atom = bond.split()[1]
-            #        bonds_adjust.remove(bond)
-            #    elif bond.split()[1] == empty:
-                    #next_atom = bond.split()[0]
-            #        bonds_adjust.remove(bond)
-            #bonds_adjust -= set(list_real_bonds)
-            #for real_atom in attach_ids:
-            #    if str(real_atom) in str(bonds_adjust):
-            #        self.large_substituent = True
-            #        break
-            #for bond in bonds_adjust:
-                #if bond.split()[0] == next_atom or bond.split()[1] == next_atom:
-            #    if int(bond.split()[0]) in attach_ids or int(bond.split()[1]) in attach_ids:
-            #        self.large_substituent = True
-            #        break
-
-            #if self.large_substituent == True:
-            #    break
 
         # Will run the self.large_var_attach function if there is larger var attach than XHn
         if self.large_substituent == True:
@@ -532,7 +491,12 @@ class markmol(object):
             atom_sym = new_atom_symbols[atom] # Get the symbol of atom to be labeled
             table = Chem.GetPeriodicTable()
             atomic_mass = int(table.GetMostCommonIsotopeMass(atom_sym)) # Get its atomic mass from the periodic table
+            # TODO: Find a more elegant solution - F has atomic mass 19, RDKIT gives 18 (problem of RDKIT).
+            if atom_sym == 'F':
+                print("F in the molecule, RDKIT gives most common isotope mass as 18, but is 19. Inconsistent with the InChI algorithm.")
+                atomic_mass = 19
             label = str(atomic_mass + 5 + atom) # Generates a label
+
             # Creates M ISO line (M  ISO  no_labeled   atom   label   atom   label   atom   label),
             # atoms are represented by indices
             iso_line += (4-len(str(atom)))*" "+str(atom)+(4-len(label))*" "+label
@@ -604,7 +568,7 @@ class markmol(object):
 
         #### Transforms variable attachments to R groups if a substituent is larger than XHn (XHn = CH3, NH2, OH...)
 
-        bonds = self.bonds #
+        bonds = self.bonds # Contains all bonds from the original file
         atom_blocks = [] # Will contain all atom lines associated with the substituents (to delete them from main block)
         self.subblock = [] # Will contain all new subblocks created for large_var_attach
 
@@ -612,8 +576,7 @@ class markmol(object):
         # Then find all the connections within the attachments
         for index in self.empty_inds:
             group_atoms = [] # Will contain all the atoms in the substituent
-            # TODO: Rename save_bonds here, it's confusing that it has the same name in both parts of the loop
-            save_bonds = [] # Will contain all the bonds to empty atoms, so they can be later deleted
+            empty_bonds = [] # Will contain all the bonds to empty atoms, so they can be later deleted
 
             # Finding atoms bonded to empty atoms (and the bonds as well) and adding them to group_atoms
             for b in bonds:
@@ -622,19 +585,19 @@ class markmol(object):
                 if index == b.split()[0]:
                     other_atom = b.split()[1]
                     group_atoms.append(other_atom)
-                    save_bonds.append(b)
+                    empty_bonds.append(b)
                     break # Since only one connection to empty atom, no need to continue with the loop
                 elif index == b.split()[1]:
                     other_atom = b.split()[0]
                     group_atoms.append(other_atom)
-                    save_bonds.append(b)
+                    empty_bonds.append(b)
                     break
                 else:
                     # If something goes wrong, check the value of other_atom
                     other_atom = str(-1)
 
             # Delete all bonds to empty atoms from the list of all the bonds
-            for s in save_bonds:
+            for s in empty_bonds:
                 if s in bonds:
                     bonds.pop(bonds.index(s))
 
@@ -660,20 +623,19 @@ class markmol(object):
                 new_save_bonds = [] # Will contain all the new bonds from this other_atom
 
                 for b in bonds:
-                    # Find all atoms to which it is connected by searching the bonds and them all to bonded_atoms
+                    # Find all atoms to which it is connected by searching the bonds and add them all to bonded_atoms
                     # If the new atoms are not in group_atoms yet, add them there (can be in several bonds)
                     # Add these bonds to new_save_bonds
                     if b.split()[0] == other_atom:
                         bonded = b.split()[1]
-                        # TODO: Shouldn't be in the if statement as well? If already in group_atoms, was already handled.
-                        bonded_atoms.append(bonded)
                         if bonded not in group_atoms:
+                            bonded_atoms.append(bonded)
                             group_atoms.append(bonded)
                         new_save_bonds.append(b)
                     elif b.split()[1] == other_atom:
                         bonded = b.split()[0]
-                        bonded_atoms.append(bonded)
                         if bonded not in group_atoms:
+                            bonded_atoms.append(bonded)
                             group_atoms.append(bonded)
                         new_save_bonds.append(b)
 
@@ -700,10 +662,6 @@ class markmol(object):
             # - also the reason why we don't have to deduct them for XHn groups anymore)
             self.no_atoms -= no_of_atoms - 1
 
-            # TODO: Check by not drawing the connection atom first if it works (due to 8 labelling) - here we are assuming the connection atom will always have the lowest label.
-            #  But perhaps not sorting them would help? Then the connection atom would be always first because it is connected to the empty atom.
-            group_atoms.sort(key=float)
-
             # Putting together the coordinate line block of the attachment
             # - add atom lines associated with each atom to atom_subblock
             atom_subblock = []
@@ -713,7 +671,6 @@ class markmol(object):
             atom_blocks += atom_subblock
 
             # Create dictionary relating old and new atom numbers
-            # TODO: Here no reverse? Probably not? - But still check.
             new_numbers = list(range(1, len(group_atoms) + 1, 1))
             block_dict = dict(zip(group_atoms, new_numbers))
 
@@ -729,7 +686,12 @@ class markmol(object):
                     b = b.replace(key, str(block_dict[key])) # Replace them in the line
                 save_bonds[l] = b # Update the line in the list
 
-            self.ctabs.append(1 + self.ctabs[-1]) # Since only one substituent each, append number by 1 larger to ctabs
+            # Add these var attachment substituents' indices into self.ctabs
+            if self.ctabs != []:
+                self.ctabs.append(1 + self.ctabs[-1]) # Since only one substituent each, append number by 1 larger to ctabs
+            else:
+                self.ctabs.append(1) # If no R groups - only directly attached var attachments, self.ctabs initially empty
+
             # Add a new subblock related to this subsittuent to the whole block of subblocks
             # This new subblock will be built from collected data in this function
             self.subblock += self.build_blocks(new_content, atom_subblock, save_bonds, no_of_atoms, no_of_bonds)
@@ -747,7 +709,7 @@ class markmol(object):
         # Removes XHn groups from attach_ids_keys
         for group in self.XHn_groups:
             if group in attach_ids_keys:
-                attach_ids_keys.pop(attach_ids_keys.index(group))
+                attach_ids_keys.remove(group)
 
         # Creates dictionary of Te connections for large_var_attach (not XHn groups)
         # and updates self.attach_ids (replacing the atom by Te - the atom is separately in the substituent)
@@ -763,11 +725,6 @@ class markmol(object):
         # Updates the atom symbols by replacing connecting atoms of large_var_attach by Te
         for num in self.attach_Te.keys():
             self.atom_symbols[num] = 'Te'
-
-        # Making sure all are strings
-        # TODO: Check that this is really necessary - maybe they are all already strings?
-        #  (At least the large_var_attach part is.
-        self.Rpositions = [str(x) for x in self.Rpositions]
 
         return copy.deepcopy(new_content)
 
@@ -816,9 +773,10 @@ class markmol(object):
         return copy.deepcopy(new_subblock)
 
     def main_block(self, new_content):
+
         #### Adjust the main block of the molecule just before the file is used
         # (deleting problematic lines, adjusting the initial line)
-        #### Translate the bonds so that they correspond to the current order of the atoms
+        # Translate the bonds so that they correspond to the current order of the atoms
 
         # All bond lines that are associated with removed atoms (are not in self.bonds)
         # are added to extre_lines and then removed
@@ -897,8 +855,6 @@ class markmol(object):
 
         #### Replaces all old atom numbers in the bond lines with new ones in the final version of the file
 
-        # TODO: These two are definitely somewhere already - no need to create them again???
-
         # main_block_init contains all the atom lines that were in the initial file
         main_dict_keys = [] # Will contain numbers of lines in the initial file that are also in the final one
         main_block_fin = [] # Will contain all atom lines that are in the final version of the SDF file
@@ -941,15 +897,12 @@ class markmol(object):
 
         # Adding spaces to values with different number of digits
         # to make sure same number of characters will be replaced in the file
-        # TODO: The spaces can sometimes cause problems when we are interested in the numbers only - make sure it's fine,
-        #  maybe only a problem when comparing the strings directly - converting to integers just fine, comparing gives not equal
-        #print(int("    5")) # This works fine
+
         for key in self.main_dict_renumber.keys():
             while len(key) > len(self.main_dict_renumber[key]):
                 self.main_dict_renumber[key] = " " + self.main_dict_renumber[key]
 
         # Converting final to initial
-        # TODO: Check where the self.main_dict_renumber is used in reverse and exchange for this
         self.main_dict_reverse_renumber = dict(zip(self.main_dict_renumber.values(), self.main_dict_renumber.keys()))
 
         # Using the dictionary to replace all the old numbers with new in the bond lines of the new SDF file
@@ -986,7 +939,7 @@ class markmol(object):
             # If the attachments are not unique and need to be sorted alphabetically with others first,
             # they are saved in a list of all these duplicates
             duplicate_parts.append(substituents)
-        elif one_total:
+        elif one_total or list_var_parts != []:
             # If same sum of attachments as other substituent,
             # creating the string for this substituent and saving it
             # into a list of these with the same total to be sorted before creating MarkInChI
@@ -1052,12 +1005,10 @@ class markmol(object):
             #if num not in list(self.main_dict_renumber.values()):
             if self.main_dict_renumber == {}:
                 # When there is no variable attachment in the molecule
-                # TODO: Is it only for no var_attach in the molecule??? Wouldn't condition with {} be better?
                 num_old = num
             else:
-                # TODO: Perhaps renumber self.Rpositions?
-                # Getting old index of the atom since it's associated with this in self.Rpositions
-                num_old = list(self.main_dict_renumber.keys())[list(self.main_dict_renumber.values()).index(num)]
+                # Getting old index of the atom since it is associated with this in self.Rpositions
+                num_old = self.main_dict_reverse_renumber[num]
 
             ind = self.Rpositions.index(num_old)
             subs = Rsubstituents[ind]
@@ -1090,16 +1041,25 @@ class markmol(object):
         #### Produces part of MarkInChI associated with lists of atoms (excluding those in variable attachments)
 
         part = ""
-        # For each replaced atoms creates sub part of MarkInChI and adds it to it
+        list_atom_parts = [] # Will contain all the list of atom strings added then to MarkInChI
+
+        # For each replaced atoms creates sub part of MarkInChI and adds it to a list
         for ind in replace_order.keys():
+            atom_part = ""
             atom_list = self.list_of_atoms[ind]
-            atom_list.sort()
-            part += "<M>"
+            atom_list.sort() # Sorts atom within the list of atoms
             lab = replace_order[ind]
-            part += lab + "-"
+            atom_part += lab + "-"
             for atom in atom_list:
-                part += atom + "!"
-            part = part[:-1]
+                atom_part += atom + "!"
+            atom_part = atom_part[:-1]
+            list_atom_parts.append(atom_part)
+
+        list_atom_parts.sort(key=lambda x: int(x.split("-")[0])) # Sorts the parts by the attachment atom index
+
+        # Creates the MarkInChI part for the lists of atoms and adds it to the MarkInChI
+        for list_part in list_atom_parts:
+            part += "<M>" + list_part
         mark_inchi += part
 
         return copy.deepcopy(mark_inchi)
@@ -1118,7 +1078,6 @@ class markmol(object):
         for i in range(0, len(list(attach_ids.keys()))):
             total = 0
             for mi in self.attachments[i]:
-                # TODO: If we renumber self.atom_symbols and translate everything?
                 other_symbol = self.atom_symbols[int(mi)]
                 if other_symbol == "Te":
                     no = 6
@@ -1144,6 +1103,7 @@ class markmol(object):
         # Initializing variables used inside of the for loop
         is_duplicate = False # Turns True whenever more substituents have the same attachment points
         attach_done = False # Turns True if the "attachment" part of the string (e.g., 1H,2H-) has been already created
+        list_attach = [] # Will be list of lists of attachments for one_total to help sorting (by integers)
         previous_attach = [] # Will contain attachment_list of the previous variable attachment
         duplicate_parts = [] # Will contain all variable attachments with the same attachment_list
         list_var_parts = [] # Will contain all variable parts of attachments with the same total so they can be ordered
@@ -1181,11 +1141,11 @@ class markmol(object):
             # Find if attached by Te (Zz)
             mol_rank = list(attach_ids.keys())[i - 1]
             symbol = attach_ids[mol_rank]
-            attach_points = []
 
             # If attach_done = True, the attachment part of the string has been already created - no need to do it again
             # Otherwise creating the attachment part
             if not attach_done:
+                attach_points = []
                 # Finding attachment points and sorting them from lowest to highest
                 for mi in self.attachments[i - 1]:
                     other_symbol = self.atom_symbols[int(mi)]
@@ -1194,21 +1154,23 @@ class markmol(object):
                     else:
                         no = 5
                     new_attach = canonical_dict[str(int(mi) + no)]
-                    attach_points.append(new_attach)
+                    attach_points.append(int(new_attach))
                 attach_points.sort()
+
                 # Creating attachment part to go with the substituent into the MarkInChI
                 num_var = "<M>"
                 for attach in attach_points:
-                    num_var += attach + "H" + ","
+                    num_var += str(attach) + "H" + ","
                 # If all indices included, remove last "," and add "-" so substituent can follow
                 num_var = num_var[:-1]
                 num_var += "-"
+            list_attach.append(attach_points)
 
             # Finding sub_inchis of the substituents
             sub_inchis = []
             if symbol == "Te":
                 # If var attach drawn as R group or if large_var_attach so that the substituent was added to R
-                # find which groups included in the MOL/SDF fileare associated with this connection
+                # find which groups included in the MOL/SDF file are associated with this connection
                 ind = self.Rpositions.index(str(mol_rank))
                 subs = self.Rsubstituents[ind]
                 for sub in subs:
@@ -1239,7 +1201,7 @@ class markmol(object):
                     # If just a single XHn as variable attachment
                     if is_duplicate:
                         duplicate_parts.append(list(symbol))
-                    elif one_total:
+                    elif one_total or list_var_parts != []:
                         one_part = num_var + symbol
                         list_var_parts.append(one_part)
                     else:
@@ -1264,14 +1226,24 @@ class markmol(object):
 
             # If all substituents with the same total have been already created a part of MarkInChI
             if not one_total and list_var_parts != []:
-                list_var_parts.sort()
+                # Create dictionary with attachments as integers and sort them
+                # (if strings sorted alphabetically only, it would put e.g., 11H,12H-C before 8H,15H-C)
+                var_dict = dict(zip(list_var_parts, list_attach))
+                var_dict = dict(sorted(var_dict.items(), key=lambda item: item[1]))
+                list_var_parts = list(var_dict.keys())
+
                 # MarkInChI part added to the var_part
                 for var in list_var_parts:
                     var_part += var
                 # Reset list_var_parts
                 list_var_parts = []
 
-            # Reset/ Update variables
+            # If not part of one_total or if one_total already done, empty list_attach
+            if not one_total and list_var_parts == []:
+                list_attach = []
+
+
+            # Reset/Update variables
             is_duplicate = False
             attach_done = False
             previous_attach = copy.deepcopy(attachment_list)
@@ -1308,4 +1280,4 @@ class markmol(object):
 if __name__=="__main__":
     # Running the code independently
     name = input("Enter the file name with the extension:")
-    mark_inchi_final = markmol(name)
+    mark_inchi_final = MarkMol(name)
