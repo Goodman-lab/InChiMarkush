@@ -1,0 +1,2 @@
+This folder contains structures for testing the algorithm when it is being changed. All structures 1-68 were working when being run by the newest version available on 19.09.2022.
+Some give the same MarkInChI, but have different SDF files to test whether the algorithm can notice some details.
